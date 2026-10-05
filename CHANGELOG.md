@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **License changed from AGPL-3.0-or-later to `GPL-3.0-or-later OR Apache-2.0`**, matching the python caldav library.  caldav has a hard dependency on this package, and an AGPL-only dependency would subject caldav users to AGPL terms, defeating caldav's Apache-2.0 option.  Releases up to 1.0.8 remain available under AGPL-3.0.
+
 ## [1.0.8] - 2026-10-12
 
 ### Changed

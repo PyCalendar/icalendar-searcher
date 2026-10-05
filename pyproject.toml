@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling>=1.27.0", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
@@ -11,7 +11,8 @@ readme = "README.md"
 ## click >=8.3.1 (via x-wr-timezone) which only supports Python >=3.10.
 ## The caldav library's own CI still exercises this library with Python 3.9.
 requires-python = ">=3.10,<4.0"
-license = {text = "AGPL-3.0-or-later"}
+license = "GPL-3.0-or-later OR Apache-2.0"
+license-files = ["COPYING.GPL", "COPYING.APACHE"]
 authors = [{ name = "Tobias Brox", email = "tobias@redpill-linpro.com" }]
 dependencies = [
     "icalendar>=6.2.0",

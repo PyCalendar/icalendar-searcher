@@ -142,8 +142,8 @@ The expansion part may cause millions of recurrences to be created.  It even sup
 
 ## License
 
-As for now I'm releasing this under the GNU Affero General Public License v.3.0.  If you find this too restrictive or if this causes license compatibility issues for you, I will consider to fix some dual licensing, like it's done with the python CalDAV library.
+This library is dual-licensed under the [GNU General Public License v3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html) or the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), the same as the python caldav library which depends on it.
 
-This also means that any contributor has to accept that the code is released under AGPL v3.0 and at some point in the future may be dual-licensed under some more permissive license, like the EUPL v1.1.
+Releases up to and including 1.0.8 were published under the GNU Affero General Public License v3.0.  The README of those releases stated that the code might later be dual-licensed under a more permissive license; the relicensing was needed because the caldav library has a hard dependency on this package, and an AGPL-only dependency would subject caldav users to AGPL terms, defeating caldav's Apache-2.0 option.
 
-I don't have very strong opinions on licenses.  If you have any issues in one way or another, please reach out.
+By contributing you agree that your contributions are released under both licenses.
