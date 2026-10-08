@@ -10,6 +10,7 @@ Ref: https://github.com/python-caldav/caldav/issues/650
 
 from datetime import date, datetime, timezone
 
+import pytest
 from icalendar import Calendar, Todo
 
 from icalendar_searcher import Searcher
@@ -65,12 +66,8 @@ def test_component_type_flags_not_mutated() -> None:
 
     searcher.check_component(_pending_todo())
 
-    assert searcher.event is None, (
-        "check_component() mutated event flag from None"
-    )
-    assert searcher.journal is None, (
-        "check_component() mutated journal flag from None"
-    )
+    assert searcher.event is None, "check_component() mutated event flag from None"
+    assert searcher.journal is None, "check_component() mutated journal flag from None"
 
 
 def test_all_none_flags_not_mutated() -> None:
@@ -108,3 +105,43 @@ def test_start_date_not_mutated_to_datetime() -> None:
     assert type(searcher.end) is date, (
         f"check_component() replaced end with {searcher.end!r} (type {type(searcher.end).__name__})"
     )
+
+
+## The component being checked must not be mutated either.  icalendar's
+## ``component.categories`` accessor inserts an empty CATEGORIES property when
+## none is present, so reading it from a filter or a sort key left an empty
+## ``CATEGORIES:`` line behind - and a client that then added a category and
+## saved the component ended up with two CATEGORIES lines.
+
+
+@pytest.mark.parametrize("key", ["categories", "category"])
+@pytest.mark.parametrize("operator", ["undef", "contains", "=="])
+def test_category_filter_does_not_mutate_component(key: str, operator: str) -> None:
+    task = _pending_todo()
+    before = task.to_ical()
+    searcher = Searcher(todo=True)
+    searcher.add_property_filter(key, None if operator == "undef" else "foo", operator=operator)
+    searcher.check_component(task)
+    assert "CATEGORIES" not in task
+    assert task.to_ical() == before
+
+
+def test_category_sort_does_not_mutate_component() -> None:
+    task = _pending_todo()
+    before = task.to_ical()
+    searcher = Searcher(todo=True)
+    searcher.add_sort_key("categories")
+    searcher.sorting_value(task)
+    assert task.to_ical() == before
+
+
+def test_category_filter_multiple_properties_not_merged() -> None:
+    """Several CATEGORIES lines must still be matched, but left as they are."""
+    task = _pending_todo()
+    task.add("categories", ["foo"])
+    task.add("categories", ["bar"])
+    before = task.to_ical()
+    searcher = Searcher(todo=True)
+    searcher.add_property_filter("categories", "bar", operator="contains")
+    assert searcher.check_component(task)
+    assert task.to_ical() == before

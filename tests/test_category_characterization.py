@@ -125,6 +125,25 @@ def test_char_categories_undef() -> None:
         assert _matches((key, None, "undef"), absent)
 
 
+def test_char_categories_empty_line_is_undefined() -> None:
+    """A stored ``CATEGORIES:`` line (written by icalendar's mutating
+    ``component.categories`` accessor, see
+    https://github.com/collective/icalendar/issues/1722) holds no category."""
+    damaged = _todo("")
+    for key in ("category", "categories"):
+        assert _matches((key, None, "undef"), damaged)
+        assert not _matches((key, None, "def"), damaged)
+
+
+def test_char_categories_set_as_plain_text() -> None:
+    """CATEGORIES set programmatically as a comma-separated string."""
+    task = _todo(None)
+    task["CATEGORIES"] = "outdoor,sports"
+    assert _matches(("categories", "sports", "contains"), task)
+    assert _matches(("category", "door", "contains"), task)
+    assert not _matches(("categories", "outdoor,sports", "!="), task)
+
+
 # --------------------------------------------------------------------------
 # sort: deterministic ordering by categories
 # --------------------------------------------------------------------------

@@ -44,9 +44,9 @@ from .utils import NEGATED_OPERATORS, types_factory
 class _CommaListSpec:
     """A comma-list property family: its plural canonical name and singular alias.
 
-    The iCalendar component value is read through ``getattr(component, plural)``
-    (e.g. ``component.categories``), which the icalendar library exposes as a
-    convenience accessor returning the list of tokens.
+    The iCalendar component value is read from the raw property (see
+    :func:`_component_tokens`), not through icalendar's ``component.categories``
+    style accessor.
     """
 
     plural: str
@@ -74,16 +74,44 @@ def is_plural_sort_key(key: str) -> bool:
     return key.lower() in _BY_PLURAL
 
 
+def _component_tokens(spec: _CommaListSpec, component: Component) -> list[str]:
+    """Return the component's tokens for this property, without modifying it.
+
+    Temporary workaround until icalendar stops mutating components on read
+    (https://github.com/collective/icalendar/issues/1722): its
+    ``component.categories`` accessor inserts an empty CATEGORIES when there
+    is none (and merges several CATEGORIES lines into one).  A searcher must
+    never change the components it inspects, so the raw property is read here.
+
+    Empty tokens are dropped: a ``CATEGORIES:`` line, as stored by clients
+    hit by that accessor, holds no category.  Keep that when reverting.
+    """
+    value = component.get(spec.plural)
+    if value is None:
+        return []
+    tokens: list[str] = []
+    for item in value if isinstance(value, list) else [value]:
+        if hasattr(item, "cats"):
+            tokens.extend(str(x) for x in item.cats)
+        else:
+            tokens.extend(str(item).split(","))
+    return [token for token in tokens if token]
+
+
 def _component_value_set(spec: _CommaListSpec, component: Component) -> set[str]:
     """Return the component's tokens for this property as a set of strings."""
-    return {str(x) for x in getattr(component, spec.plural)}
+    ## Temporary workaround, see _component_tokens and
+    ## https://github.com/collective/icalendar/issues/1722
+    return set(_component_tokens(spec, component))
 
 
 def sort_value(key: str, component: Component) -> object:
     """Return the raw value used when sorting by this comma-list property."""
     spec = _spec_for(key)
     assert spec is not None, f"{key!r} is not a comma-list property"
-    return getattr(component, spec.plural)
+    ## Temporary workaround, see _component_tokens and
+    ## https://github.com/collective/icalendar/issues/1722
+    return _component_tokens(spec, component)
 
 
 def store_filter_value(key: str, value: object) -> object:
@@ -157,8 +185,8 @@ def matches(
     plural = key.lower() == spec.plural
     comp_values = _component_value_set(spec, component)
 
-    ## icalendar >=6 supplies an empty vCategory default even when the
-    ## property is absent, so presence is decided by the value set.
+    ## Presence is decided by the value set: an absent CATEGORIES and an
+    ## empty one (``CATEGORIES:``) are both undefined.
     if operator == "undef":
         return not comp_values
     if operator == "def":

@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Category filters and sorting added an empty `CATEGORIES` to the inspected component**: `check_component()` (with a `categories`/`category` filter, including `undef`) and `sorting_value()` (with a `categories` sort key) read icalendar's `component.categories` accessor, which inserts an empty `CATEGORIES` property when none exists and merges multiple `CATEGORIES` lines into one.  A client that searched for tasks without categories and then added one ended up saving two lines, `CATEGORIES:` and `CATEGORIES:foo` (seen with plann's interactive task review on top of python-caldav).  The categories are now read from the raw property, leaving the component untouched.  An empty `CATEGORIES:` line, as stored by such a client, now counts as no categories, so `undef` finds these tasks.
+
 - **`contains` ignored `Collation.UNICODE` and `Collation.LOCALE`**: substring matching silently fell back to Python's `in` operator, so a `tr_TR` search for "istanbul" did not find "İstanbul", although `==` did.  `contains` and `!contains` now use ICU `StringSearch` with the same collator as `==`.  This also applies to case-sensitive searches, which no longer compare code points: for instance, ignorable characters such as soft hyphens are now skipped.
 
 - **`==` and `!=` on `category`/`categories` ignored the collation**, comparing case only.  They now honour it like the other text properties.
