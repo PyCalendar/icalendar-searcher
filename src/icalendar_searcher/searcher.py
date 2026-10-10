@@ -179,7 +179,7 @@ class Searcher(FilterMixin):
           - "==": exact match to at least one category name
           - Commas in filter values treated as literal characters
 
-        For the operator, the following is (planned to be) supported:
+        The following operators are supported:
 
         * contains - will do a substring match (A search for "summary"
           "contains" "rain" will return both events with summary
@@ -187,13 +187,17 @@ class Searcher(FilterMixin):
 
         * == - exact match is required
 
-        * ~ - regexp match
+        * != or <> - the negation of ==.  Both spellings are accepted;
+          the filter is stored as !=.  Like == and contains, it requires
+          the property to be defined, so a component without the
+          property does not match (as with a negated text-match in
+          RFC 4791 section 9.7.5).  Use undef to find those.
 
-        * <, >, <=, >= - comparision
+        * def, undef - will match if the property is (not) defined.
+          The value is ignored and may be set to None.
 
-        * <> or != - inqueality, both supported
-
-        * def, undef - will match if the property is (not) defined.  value can be set to None, the value will be ignored.
+        Not implemented yet (raise NotImplementedError): ~ (regexp
+        match) and the comparisons <, <=, >, >=.
 
         Examples:
             # Case-insensitive search (simple API)
@@ -213,9 +217,13 @@ class Searcher(FilterMixin):
         ## plural form splits on commas and matches exactly, the singular form
         ## keeps commas literal and matches substrings.
         key = key.lower()
-        if operator not in ("contains", "undef", "=="):
+        if operator == "<>":
+            operator = "!="
+        if operator not in ("contains", "==", "!=", "def", "undef"):
             raise NotImplementedError(f"The operator {operator} is not supported yet.")
-        if operator != "undef":
+        if operator not in ("def", "undef"):
+            if value is None:
+                raise ValueError(f"The operator {operator} needs a value, got None")
             if comma_list.is_comma_list_key(key):
                 self._property_filters[key] = comma_list.store_filter_value(key, value)
             else:

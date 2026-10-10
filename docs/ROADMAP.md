@@ -258,12 +258,24 @@ over, and tests written against it would pin the wrong behaviour.
 | 2.2 `def`, and truth in the docstring | `def` implemented; the docstring's operator list reduced to what exists, with the rest moved to a documented "not implemented" list matching the README | 1 |
 
 **Tasks:**
-- [ ] 2.1 Semantics of `!=` / `<>` settled and written down, including undefined properties
-- [ ] 2.1 `!=` / `<>` implemented for ordinary and comma-list properties
-- [ ] 2.1 Tests: ordinary and comma-list, plural and singular, property present and absent
+- [x] 2.1 Semantics of `!=` / `<>` settled and written down, including undefined properties
+- [x] 2.1 `!=` / `<>` implemented for ordinary and comma-list properties
+- [x] 2.1 Tests: ordinary and comma-list, plural and singular, property present and absent
 - [ ] 2.1 Agreement with `caldav`'s `negate-condition` XML builder verified
-- [ ] 2.2 `def` implemented
-- [ ] 2.2 Docstring operator list reduced to what exists; the rest listed as not implemented, matching the README
+
+**Finding from the agreement check (2026-10-11):** they do not agree, and cannot
+by construction.  RFC 4791 §9.7.5 `text-match` is a *substring* match, so
+`negate-condition="yes"` means "does not contain", not "not equal".  Sending it for
+`SUMMARY != "Training"` would wrongly drop "Training session".  `caldav` must send
+no `text-match` for `!=` (at most a bare `prop-filter` asserting the property is
+defined) and leave the verdict to the client-side filter.  Today `caldav`'s builder
+sends a *positive* `text-match` for `!=` (the opposite result set, and `post_filter`
+is not forced for `!=`) and raises `KeyError` for `def`.  Both are `caldav` work,
+outside this budget, and must land before 1.1.0 reaches `caldav` users.  If
+"does not contain" is wanted - the one negation CalDAV can express server-side - it
+needs an operator of its own.
+- [x] 2.2 `def` implemented
+- [x] 2.2 Docstring operator list reduced to what exists; the rest listed as not implemented, matching the README
 
 2.1 breaks down as half an hour to settle and write down the semantics, an hour to
 implement, and an hour and a half of tests - ordinary and comma-list properties,
