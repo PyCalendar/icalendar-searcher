@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **All-day events were matched in the time zone of the Python process**: dates (`VALUE=DATE`) and floating datetimes in a component were anchored to the process-local time zone, so the result of a time-range or alarm search depended on `TZ`.  An all-day event on Oct 11 matched a search for Oct 12 in Europe/Berlin when the process ran in UTC.  When the search range is timezone-aware, such values are now interpreted in the time zone of the search range.  Naive search ranges behave as before.  Note that caldav turns `date` search bounds into UTC midnights, so in such searches floating (naive) times in components are now read as UTC.  https://github.com/pycalendar/icalendar-searcher/issues/17
+
 ## [1.0.7] - 2026-10-11
 
 ### Fixed

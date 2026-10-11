@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import TYPE_CHECKING, Any
 
 import recurring_ical_events
@@ -349,6 +349,19 @@ class Searcher(FilterMixin):
         _alarm_start = _normalise_dt_local(self.alarm_start)
         _alarm_end = _normalise_dt_local(self.alarm_end)
 
+        ## Dates and floating datetimes in the component are interpreted in the
+        ## time zone of the search range when it is timezone-aware, otherwise in
+        ## the time zone of the Python process.  If start and end are in
+        ## different time zones, the time zone of start is used.
+        def _tz_of(*values: datetime | None) -> tzinfo | None:
+            for value in values:
+                if isinstance(value, datetime) and value.tzinfo is not None:
+                    return value.tzinfo
+            return None
+
+        _tz = _tz_of(self.start, self.end)
+        _alarm_tz = _tz_of(self.alarm_start, self.alarm_end) or _tz
+
         ## recurrence_set is our internal generator/iterator containing
         ## everything that hasn't been filtered out yet (in most
         ## cases, the generator will yield either one or zero
@@ -438,7 +451,9 @@ class Searcher(FilterMixin):
             ## probably trust recur.between to do the right thing?
             if not _ignore_rrule_and_time and (_start or _end):
                 recurrence_set = (
-                    x for x in recurrence_set if self._check_range(x, _start=_start, _end=_end)
+                    x
+                    for x in recurrence_set
+                    if self._check_range(x, _start=_start, _end=_end, _tz=_tz)
                 )
 
             ## This if is just to save some few CPU cycles - skip filtering if it's not needed
@@ -465,7 +480,9 @@ class Searcher(FilterMixin):
                 recurrence_set = (
                     x
                     for x in recurrence_set
-                    if self._check_alarm_range(x, _alarm_start=_alarm_start, _alarm_end=_alarm_end)
+                    if self._check_alarm_range(
+                        x, _alarm_start=_alarm_start, _alarm_end=_alarm_end, _tz=_alarm_tz
+                    )
                 )
 
         if self.expand:

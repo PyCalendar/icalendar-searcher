@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from datetime import date, datetime
+from datetime import date, datetime, time, tzinfo
 from itertools import tee
 
 from icalendar.prop import TypesFactory
@@ -16,18 +16,25 @@ types_factory = TypesFactory()
 
 ## Helper to normalize date/datetime for comparison
 ## (I feel this one is duplicated over many projects ...)
-def _normalize_dt(dt_value: date | datetime) -> datetime:
-    """Convert date to datetime for comparison, or return datetime as-is with timezone."""
+def _normalize_dt(dt_value: date | datetime, tz: tzinfo | None = None) -> datetime:
+    """Convert date to datetime for comparison, or return datetime as-is with timezone.
+
+    Dates and floating (naive) datetimes have no time zone of their own.
+    They are interpreted in ``tz`` if given, otherwise in the time zone
+    of the Python process.
+    """
     if dt_value is None:
         return None
     ## If it's a date (not datetime), convert to datetime at midnight
     if hasattr(dt_value, "year") and not hasattr(dt_value, "hour"):
-        from datetime import time
-
-        return datetime.combine(dt_value, time.min).astimezone()
-    ## TODO: we should probably do some research on the default calendar timezone,
-    ## which may not be the same as the local timezone ... uh ... timezones are
-    ## difficult.
+        dt_value = datetime.combine(dt_value, time.min)
+    if tz is not None and dt_value.tzinfo is None:
+        ## pytz tzinfo objects carry a fixed offset and must be applied with localize()
+        if hasattr(tz, "localize"):
+            dt_value = tz.localize(dt_value)
+        else:
+            dt_value = dt_value.replace(tzinfo=tz)
+    ## A fixed offset makes timedelta arithmetic exact, also across DST changes
     return dt_value.astimezone()
 
 
