@@ -71,23 +71,11 @@ class FilterMixin:
                 raise
             comp_start = None
 
-        if comp_name == "VEVENT":
-            ## comp_start is always set.
-            if not comp_end and isinstance(comp_start, datetime):
-                ## if comp_end is not set and comp_start is a datetime,
-                ## consider zero duration
-                comp_end = comp_start
-            elif not comp_end:
-                ## if comp_end is not set and comp_start is a datetime,
-                ## consider one day duration
-                comp_end = comp_start + timedelta(day=1)
-                ## TODO: What time of the day does the day change?
-                ## Time zones are difficult!  TODO: as for now,
-                ## self.start is a datetime, but in the future dates
-                ## should be allowed as well.  Then the time zone
-                ## problem for full-day events is at least simplified.
+        ## For a VEVENT without DTEND or DURATION, component.end already
+        ## gives zero duration for a datetime DTSTART and one day for a
+        ## date DTSTART (RFC 5545 section 3.6.1), so comp_end is always set.
 
-        elif comp_name == "VTODO":
+        if comp_name == "VTODO":
             ## There is a long matrix for VTODO in the RFC4701,
             ## section 9.9, and it may seem complicated, but it isn't
             ## that bad:
