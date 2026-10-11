@@ -24,7 +24,7 @@ I've decided to release 1.0 now as I think it's getting more or less feature-com
 
 `filter`, `filter_calendar` and `sort_calendar` has not been tested yet, is AI-generated and is only covered by AI-generated test code.  There may be dragons.
 
-**Operators**: `contains`, `==`, `!=` (alias `<>`), `def` and `undef`.  `!=` requires the property to be defined; a component without it does not match (use `undef` for that).
+**Operators**: `contains`, `==`, `!contains`, `!=` (alias `<>`), `def` and `undef`.  The negations require the property to be defined; a component without it does not match (use `undef` for that).
 
 **Not yet implemented**: `<`, `<=`, `>`, `>=`, `~` (regex).
 

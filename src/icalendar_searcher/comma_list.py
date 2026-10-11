@@ -37,7 +37,7 @@ from icalendar import Component
 from icalendar.prop import vCategory, vText
 
 from .collation import Collation, get_collation_function
-from .utils import types_factory
+from .utils import NEGATED_OPERATORS, types_factory
 
 
 @dataclass(frozen=True)
@@ -152,7 +152,7 @@ def matches(
 ) -> bool:
     """Whether ``component`` matches a comma-list property filter.
 
-    Handles the ``def``, ``undef``, ``contains``, ``==`` and ``!=`` operators
+    Handles the ``def``, ``undef``, ``contains``, ``==``, ``!contains`` and ``!=`` operators
     for both the plural (exact/subset) and singular (substring) forms.
     """
     spec = _spec_for(key)
@@ -166,11 +166,11 @@ def matches(
         return not comp_values
     if operator == "def":
         return bool(comp_values)
-    if operator == "!=":
-        ## like the other value operators, != needs the property defined
+    if operator in NEGATED_OPERATORS:
+        ## like the other value operators, a negation needs the property defined
         return bool(comp_values) and not matches(
             key,
-            "==",
+            NEGATED_OPERATORS[operator],
             filter_value,
             component,
             collation=collation,

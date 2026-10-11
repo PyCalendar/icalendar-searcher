@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`!=` / `<>` and `def` operators** for `add_property_filter()`.  `!=` is the negation of `==` (`<>` is accepted and stored as `!=`) and, like the other value operators, requires the property to be defined - a component without the property does not match; `undef` covers that case.  For `categories` it negates exact set equality, for `category` it means no single category equals the value.  `def` is the inverse of `undef`.  The `add_property_filter()` docstring no longer lists unimplemented operators as if they worked.  Requested in https://github.com/python-caldav/caldav/issues/568
+- **`!=` / `<>`, `!contains` and `def` operators** for `add_property_filter()`.  `!=` is the negation of `==` (`<>` is accepted and stored as `!=`), `!contains` the negation of `contains`.  Like the other value operators, both require the property to be defined - a component without the property does not match; `undef` covers that case.  For `categories` and `category` they negate the plural and singular matching rules respectively.  `def` is the inverse of `undef`.  The `add_property_filter()` docstring no longer lists unimplemented operators as if they worked.  Requested in https://github.com/python-caldav/caldav/issues/568
 
 ### Changed
 

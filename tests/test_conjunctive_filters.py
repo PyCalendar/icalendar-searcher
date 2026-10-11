@@ -54,6 +54,8 @@ MATCHING = {
     "location-ne": F("LOCATION", "Berlin", "!="),
     "categories-ne": F("categories", "work", "!="),
     "category-ne": F("category", "play", "<>"),
+    "status-not-contains": F("STATUS", "CANCEL", "!contains"),
+    "category-not-contains": F("category", "xyz", "!contains"),
     "summary-contains-unicode": F("SUMMARY", "TRAINING", "contains", _unicode),
     "category-contains-unicode": F("category", "WOR", "contains", _unicode),
 }
@@ -74,6 +76,9 @@ FAILING = {
     "dtend-ne": F("DTEND", datetime(2025, 1, 1, 11), "!="),
     "categories-ne": F("categories", "home,work", "!="),
     "category-ne": F("category", "home", "<>"),
+    "summary-not-contains": F("SUMMARY", "rain", "!contains"),
+    "dtend-not-contains": F("DTEND", datetime(2025, 1, 1, 11), "!contains"),
+    "categories-not-contains": F("categories", "work", "!contains"),
     "summary-contains-unicode": F("SUMMARY", "xyz", "contains", _unicode),
     "category-contains-unicode": F("category", "XYZ", "contains", _unicode),
 }
@@ -181,6 +186,9 @@ def test_expanded_recurrence_undef(undef_first: bool, summary: str, expected: in
         (F("SUMMARY", None, "def"), 3),
         (F("SUMMARY", "Stand", "!="), 3),
         (F("SUMMARY", "Standup", "!="), 0),
+        (F("DTEND", date(2025, 1, 2), "!contains"), 0),
+        (F("SUMMARY", "xyz", "!contains"), 3),
+        (F("SUMMARY", "Stand", "!contains"), 0),
     ],
     ids=repr,
 )

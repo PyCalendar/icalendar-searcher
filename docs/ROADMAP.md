@@ -262,20 +262,29 @@ over, and tests written against it would pin the wrong behaviour.
 - [x] 2.1 `!=` / `<>` implemented for ordinary and comma-list properties
 - [x] 2.1 Tests: ordinary and comma-list, plural and singular, property present and absent
 - [ ] 2.1 Agreement with `caldav`'s `negate-condition` XML builder verified
+- [x] 2.2 `def` implemented
+- [x] 2.2 Docstring operator list reduced to what exists; the rest listed as not implemented, matching the README
 
 **Finding from the agreement check (2026-10-11):** they do not agree, and cannot
 by construction.  RFC 4791 §9.7.5 `text-match` is a *substring* match, so
 `negate-condition="yes"` means "does not contain", not "not equal".  Sending it for
 `SUMMARY != "Training"` would wrongly drop "Training session".  `caldav` must send
 no `text-match` for `!=` (at most a bare `prop-filter` asserting the property is
-defined) and leave the verdict to the client-side filter.  Today `caldav`'s builder
-sends a *positive* `text-match` for `!=` (the opposite result set, and `post_filter`
-is not forced for `!=`) and raises `KeyError` for `def`.  Both are `caldav` work,
-outside this budget, and must land before 1.1.0 reaches `caldav` users.  If
-"does not contain" is wanted - the one negation CalDAV can express server-side - it
-needs an operator of its own.
-- [x] 2.2 `def` implemented
-- [x] 2.2 Docstring operator list reduced to what exists; the rest listed as not implemented, matching the README
+defined) and leave the verdict to the client-side filter.  `caldav`'s builder used
+to send a *positive* `text-match` for `!=` (the opposite result set) and raise
+`KeyError` for `def`.  The `caldav` side of the fix - the builder, and a client-side
+fallback for all three operators - is written (`caldav` work, outside this budget),
+but not yet merged; the last 2.1 box is ticked when it is.  Until `caldav-server-tester`
+probes which servers honour `negate-condition`, `caldav` never sends the negations
+to the server.
+
+"Does not contain" - the one negation CalDAV can express server-side - needed an
+operator of its own: `!contains`, added to this library on 2026-10-11 at the
+maintainer's request, alongside `!=`.  It matches the server's negated
+`text-match` only for ordinary properties, and for the singular `category` as
+long as the value holds no comma (the server matches the raw comma-joined
+line).  Plural `categories` matches whole tokens, not substrings, so `caldav`
+must not send `categories !contains` to the server.
 
 2.1 breaks down as half an hour to settle and write down the semantics, an hour to
 implement, and an hour and a half of tests - ordinary and comma-list properties,
@@ -351,6 +360,7 @@ hidden by a fallback that says nothing.
 - [ ] 3.1 The collation axes decided and written down, mapped onto ICU and the CalDAV collation names
 - [ ] 3.1 The false comment at `collation.py:187` deleted
 - [ ] 3.2 Collation-aware `contains` on ICU `StringSearch`, consistent with `==`
+- [ ] 3.2 `==` and `!=` on `category`/`categories` honour the collation (`comma_list` compares case only today)
 - [ ] 3.3 Collation test matrix (de_DE / tr_TR / nb_NO / root, both axes, both operators)
 - [ ] 3.4 README collation section rewritten
 
@@ -492,7 +502,7 @@ for the comparison operators under
 | Release | Contents | After |
 |---|---|---|
 | 1.0.7 | Conjunctive property filters, together with the `comma_list` consolidation *(baseline, not charged to the grant)* | Phase 1 |
-| 1.1.0 | `!=`, `<>`, `def`; collation-aware substring matching, and any `==` change the collation decision forces | Phases 2, 3 |
+| 1.1.0 | `!=`, `<>`, `!contains`, `def`; collation-aware substring matching, and any `==` change the collation decision forces | Phases 2, 3 |
 | 1.1.x | The Phase 5 findings, as they are fixed | Phase 5 |
 | 1.1.x | Usage guide, API reference and a repaired README, in-repository | Phase 4 (funded part) |
 | *unscheduled* | A published documentation site, and executable examples | Phase 4's unfunded 12 hours |

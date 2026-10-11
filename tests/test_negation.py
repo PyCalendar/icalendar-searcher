@@ -1,11 +1,16 @@
 """
-The ``!=`` / ``<>`` and ``def`` operators.
+The ``!=`` / ``<>``, ``!contains`` and ``def`` operators.
 
 ``!=`` (spelled ``<>`` too) is the negation of ``==``, and like every other
 value operator it requires the property to be defined: a component without
 the property does not match.  This follows RFC 4791 section 9.7.2, where a
 ``prop-filter`` holding a ``text-match`` (negated or not) only matches a
 defined property.  "Not defined" is the job of ``undef``.
+
+``!contains`` is the negation of ``contains``, with the same requirement
+that the property is defined.  For ordinary properties this is what a
+``text-match`` with ``negate-condition="yes"`` means in RFC 4791 section
+9.7.5; for plural ``categories`` it negates the exact token match instead.
 
 ``def`` is the inverse of ``undef``.
 """
@@ -95,9 +100,10 @@ def test_resources_is_one_text_value() -> None:
     event = _event(resources="projector,room")
     assert _matches(event, "RESOURCES", "projector,room", "==")
     assert _matches(event, "RESOURCES", "projector", "!=")
+    assert not _matches(event, "RESOURCES", "projector", "!contains")
 
 
-@pytest.mark.parametrize("operator", ("==", "contains", "!=", "<>"))
+@pytest.mark.parametrize("operator", ("==", "contains", "!=", "<>", "!contains"))
 def test_value_operators_refuse_none(operator: str) -> None:
     with pytest.raises(ValueError):
         Searcher().add_property_filter("SUMMARY", None, operator=operator)
@@ -109,6 +115,8 @@ def test_value_operators_refuse_none(operator: str) -> None:
         ("def", None, 1),
         ("!=", "Oslo", 0),
         ("!=", "Bergen", 1),
+        ("!contains", "Os", 0),
+        ("!contains", "Berg", 1),
     ],
 )
 def test_negation_on_override(operator: str, value: object, expected: int) -> None:
@@ -159,6 +167,38 @@ def test_def_stores_no_value() -> None:
     searcher.add_property_filter("LOCATION", None, operator="def")
     assert searcher._property_filters == {}
     assert searcher._property_operator == {"location": "def"}
+
+
+@pytest.mark.parametrize(
+    ("props", "key", "value", "expected"),
+    [
+        ## ordinary property: no substring match
+        ({"summary": "Training session"}, "SUMMARY", "rain", False),
+        ({"summary": "Training session"}, "SUMMARY", "Training session", False),
+        ({"summary": "Training session"}, "SUMMARY", "xyz", True),
+        ({"summary": "Training session"}, "SUMMARY", "RAIN", True),
+        ({}, "SUMMARY", "rain", False),
+        ## plural: not every given category is present
+        ({"categories": ["work", "home"]}, "categories", "work", False),
+        ({"categories": ["work", "home"]}, "categories", "home,work", False),
+        ({"categories": ["work", "home"]}, "categories", "work,play", True),
+        ({"categories": ["work", "home"]}, "categories", "wor", True),
+        ({}, "categories", "work", False),
+        ## singular: no category contains the substring
+        ({"categories": ["work", "home"]}, "category", "ork", False),
+        ({"categories": ["work", "home"]}, "category", "play", True),
+        ({}, "category", "work", False),
+    ],
+)
+def test_not_contains(props: dict, key: str, value: object, expected: bool) -> None:
+    assert _matches(_event(**props), key, value, "!contains") is expected
+
+
+def test_not_contains_case_insensitive() -> None:
+    event = _event(summary="Training session", categories=["Work"])
+    assert not _matches(event, "SUMMARY", "RAIN", "!contains", case_sensitive=False)
+    assert not _matches(event, "category", "ORK", "!contains", case_sensitive=False)
+    assert _matches(event, "category", "xyz", "!contains", case_sensitive=False)
 
 
 @pytest.mark.parametrize("operator", ("~", "<", "<=", ">", ">=", "bogus"))

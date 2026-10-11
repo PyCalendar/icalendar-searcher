@@ -15,7 +15,13 @@ from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 from . import comma_list
 from .collation import Collation, get_sort_key_function
 from .filters import FilterMixin
-from .utils import _iterable_or_false, _normalize_dt, types_factory
+from .utils import (
+    PRESENCE_OPERATORS,
+    SUPPORTED_OPERATORS,
+    _iterable_or_false,
+    _normalize_dt,
+    types_factory,
+)
 
 if TYPE_CHECKING:
     from caldav.calendarobjectresource import CalendarObjectResource
@@ -187,11 +193,17 @@ class Searcher(FilterMixin):
 
         * == - exact match is required
 
+        * !contains - the negation of contains: no substring match.
+          Like contains, it requires the property to be defined.  For
+          ordinary properties this is what a negated text-match means in
+          RFC 4791 section 9.7.5.  For "categories" it negates the exact
+          token match (not a substring match), so it has no server-side
+          equivalent.
+
         * != or <> - the negation of ==.  Both spellings are accepted;
           the filter is stored as !=.  Like == and contains, it requires
           the property to be defined, so a component without the
-          property does not match (as with a negated text-match in
-          RFC 4791 section 9.7.5).  Use undef to find those.
+          property does not match.  Use undef to find those.
 
         * def, undef - will match if the property is (not) defined.
           The value is ignored and may be set to None.
@@ -219,9 +231,9 @@ class Searcher(FilterMixin):
         key = key.lower()
         if operator == "<>":
             operator = "!="
-        if operator not in ("contains", "==", "!=", "def", "undef"):
+        if operator not in SUPPORTED_OPERATORS:
             raise NotImplementedError(f"The operator {operator} is not supported yet.")
-        if operator not in ("def", "undef"):
+        if operator not in PRESENCE_OPERATORS:
             if value is None:
                 raise ValueError(f"The operator {operator} needs a value, got None")
             if comma_list.is_comma_list_key(key):

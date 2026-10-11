@@ -9,7 +9,7 @@ from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
 from . import comma_list
 from .collation import Collation, get_collation_function
-from .utils import _normalize_dt
+from .utils import NEGATED_OPERATORS, _normalize_dt
 
 
 class FilterMixin:
@@ -238,8 +238,11 @@ class FilterMixin:
 
         comp_key = key
         comp_value = component.get(comp_key)
-        if operator == "!=":
-            return comp_key in component and not self._check_property_filter(component, key, "==")
+        if operator in NEGATED_OPERATORS:
+            positive = NEGATED_OPERATORS[operator]
+            return comp_key in component and not self._check_property_filter(
+                component, key, positive
+            )
         if operator == "def":
             return comp_key in component
         if operator == "undef":
