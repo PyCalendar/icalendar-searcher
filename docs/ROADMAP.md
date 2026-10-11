@@ -103,13 +103,13 @@ has no server to delegate to, so it uses `filter()` - which is precisely the par
 this library that has never had a real consumer.  See
 [Risks](#a-third-of-the-library-has-never-been-used-in-anger).
 
-### Baseline: what ships today
+### Baseline: state after v1.0.6
 
-v1.0.6 was released 2026-05-29.  The `[Unreleased]` section of
-[`CHANGELOG.md`](../CHANGELOG.md) holds the `comma_list` consolidation, which ships
-as **v1.0.7, which is not charged to the grant**.  It ships first, and everything
-below is measured against it.  Unlike the sibling projects, this release is small
-enough to be donated: the MoU has no line item for it, and none is claimed.
+v1.0.6 was released 2026-05-29.  The `comma_list` consolidation that followed it
+is **not charged to the grant**, and everything below is measured against it.  It was
+never released on its own; it ships in v1.0.7 together with the Phase 1 fix.  Unlike
+the sibling projects, this work is small enough to be donated: the MoU has no line
+item for it, and none is claimed.
 
 | | |
 |---|---|
@@ -206,14 +206,14 @@ it is a wrong verdict rather than a missing one, and because it reaches every
 - [x] 1.1 The `filters.py:237` "latent bug" comment removed
 - [x] 1.1 Changelog entry
 - [x] 1.1 `caldav`'s own suite run against the release candidate, and the fallout read
-- [ ] 1.1 The 1.0.8 release
+- [ ] 1.1 The 1.0.7 release
 
 The fix itself is half an hour.  The rest is the test matrix - every operator against
 every property class (ordinary, comma-list plural, comma-list singular, `undef`,
 expanded recurrences with `skip_undef`, singular `contains` under a non-`SIMPLE`
 collation) in both orders, roughly two hours - plus an
 hour to run `caldav`'s own suite against the release candidate and read the fallout,
-and half an hour for the changelog and the 1.0.8 release.
+and half an hour for the changelog and the 1.0.7 release.
 
 ---
 
@@ -479,14 +479,13 @@ for the comparison operators under
 
 | Release | Contents | After |
 |---|---|---|
-| 1.0.7 | *(baseline - `comma_list` consolidation, ships before the funded period, not charged to it)* | - |
-| 1.0.8 | Conjunctive property filters | Phase 1 |
+| 1.0.7 | Conjunctive property filters, together with the `comma_list` consolidation *(baseline, not charged to the grant)* | Phase 1 |
 | 1.1.0 | `!=`, `<>`, `def`; collation-aware substring matching, and any `==` change the collation decision forces | Phases 2, 3 |
 | 1.1.x | The Phase 5 findings, as they are fixed | Phase 5 |
 | 1.1.x | Usage guide, API reference and a repaired README, in-repository | Phase 4 (funded part) |
 | *unscheduled* | A published documentation site, and executable examples | Phase 4's unfunded 12 hours |
 
-1.0.8 is deliberately its own patch release, ahead of the feature work.  `caldav`
+1.0.7 is deliberately its own patch release, ahead of the feature work.  `caldav`
 pins `>=1.0.5,<2`, so it reaches users on their next `pip install -U` without any
 action on `caldav`'s part, and there is no reason to make a correctness fix wait for
 a feature.
@@ -578,7 +577,7 @@ behaviour is the intersection, and the current behaviour is not merely wrong but
 non-deterministic from the caller's point of view.  The risk is not that the change
 is wrong, it is that it is silent.
 
-**Mitigation:** the change ships alone, in its own patch release, with a changelog
+**Mitigation:** the change ships as the only behaviour change in its own patch release, with a changelog
 entry that spells out the before and after rather than saying "fixed filtering".
 `caldav`'s test suite is run against the release candidate before it goes out -
 `caldav` is the only known consumer, so this is a tractable check rather than a
