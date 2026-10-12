@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
-from icalendar import Alarm, Calendar, Event, Todo
+from icalendar import Alarm, Calendar, Event, Journal, Todo
 
 from icalendar_searcher import Searcher
 
@@ -39,7 +39,7 @@ def process_tz(request: pytest.FixtureRequest) -> Iterator[str]:
         time.tzset()
 
 
-def _cal(*components: Event | Todo) -> Calendar:
+def _cal(*components: Event | Todo | Journal) -> Calendar:
     cal = Calendar()
     for comp in components:
         cal.add_component(comp)
@@ -246,3 +246,28 @@ def test_alarm_on_all_day_event_across_dst(process_tz: str) -> None:
         alarm_end=datetime(2026, 10, 25, 0, 30, tzinfo=tz),
     )
     assert not searcher.check_component(cal)
+
+
+@pytest.mark.parametrize("search_tz", SEARCH_TIMEZONES)
+def test_all_day_journal(process_tz: str, search_tz: str) -> None:
+    """A journal with a date DTSTART spans that whole day (RFC 4791 section 9.9)."""
+    journal = Journal()
+    journal.add("uid", "allday-journal")
+    journal.add("dtstamp", datetime(2026, 10, 1))
+    journal.add("dtstart", date(2026, 10, 25))
+    cal = _cal(journal)
+    tz = ZoneInfo(search_tz)
+    for day, expected in ((24, False), (25, True), (26, False)):
+        searcher = Searcher(
+            journal=True,
+            start=datetime(2026, 10, day, 12, 0, tzinfo=tz),
+            end=datetime(2026, 10, day, 13, 0, tzinfo=tz),
+        )
+        assert bool(searcher.check_component(cal)) is expected, day
+    ## 23:30 on the day itself; Oct 25 is 25 hours long in Europe/Berlin
+    searcher = Searcher(
+        journal=True,
+        start=datetime(2026, 10, 25, 23, 30, tzinfo=tz),
+        end=datetime(2026, 10, 25, 23, 45, tzinfo=tz),
+    )
+    assert searcher.check_component(cal)

@@ -125,10 +125,13 @@ class FilterMixin:
             if not comp_start:
                 ## Journal without DTSTART doesn't match time ranges
                 return False
-            if isinstance(comp_start, datetime):
+            ## comp_start is normalised to a datetime, so look at the raw
+            ## DTSTART: a date means the journal spans that whole day
+            raw_start = component.start
+            if isinstance(raw_start, datetime):
                 comp_end = comp_start
             else:
-                comp_end = comp_start + timedelta(days=1)
+                comp_end = _normalize_dt(raw_start + timedelta(days=1), _tz)
 
         if comp_start == comp_end:
             ## Now the match requirement is start <= comp_end
