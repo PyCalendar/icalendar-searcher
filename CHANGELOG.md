@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`!=` / `<>`, `!contains` and `def` operators** for `add_property_filter()`.  `!=` is the negation of `==` (`<>` is accepted and stored as `!=`), `!contains` the negation of `contains`.  Like the other value operators, both require the property to be defined - a component without the property does not match; `undef` covers that case.  For `categories` and `category` they negate the plural and singular matching rules respectively.  `def` is the inverse of `undef`.  The `add_property_filter()` docstring no longer lists unimplemented operators as if they worked.  Requested in https://github.com/python-caldav/caldav/issues/568
+
 ### Changed
 
 - **License changed from AGPL-3.0-or-later to `GPL-3.0-or-later OR Apache-2.0`**, matching the python caldav library.  caldav has a hard dependency on this package, and an AGPL-only dependency would subject caldav users to AGPL terms, defeating caldav's Apache-2.0 option.  Releases up to 1.0.8 remain available under AGPL-3.0.
+
+- **`add_property_filter()` refuses `None` as the value of a value operator** (`==`, `contains` and the negations) with `ValueError`.  It used to be stored as the text "None".
+
+### Fixed
+
+- **`==` never matched a property occurring more than once** (`COMMENT`, `ATTENDEE`, `CONTACT`, ...): such a component has a list of values, which was compared as a whole.  It now matches if any instance equals the value, and `!=` if none does.
 
 ## [1.0.8] - 2026-10-12
 

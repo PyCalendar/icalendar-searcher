@@ -50,6 +50,12 @@ MATCHING = {
     "category-contains": F("category", "ork", "contains"),
     "category-eq": F("category", "home", "=="),
     "dtend-undef": F("DTEND", None, "undef"),
+    "location-def": F("LOCATION", None, "def"),
+    "location-ne": F("LOCATION", "Berlin", "!="),
+    "categories-ne": F("categories", "work", "!="),
+    "category-ne": F("category", "play", "<>"),
+    "status-not-contains": F("STATUS", "CANCEL", "!contains"),
+    "category-not-contains": F("category", "xyz", "!contains"),
     "summary-contains-unicode": F("SUMMARY", "TRAINING", "contains", _unicode),
     "category-contains-unicode": F("category", "WOR", "contains", _unicode),
 }
@@ -65,6 +71,14 @@ FAILING = {
     "category-eq": F("category", "wor", "=="),
     "location-undef": F("LOCATION", None, "undef"),
     "categories-undef": F("categories", None, "undef"),
+    "dtend-def": F("DTEND", None, "def"),
+    "location-ne": F("LOCATION", "Oslo", "!="),
+    "dtend-ne": F("DTEND", datetime(2025, 1, 1, 11), "!="),
+    "categories-ne": F("categories", "home,work", "!="),
+    "category-ne": F("category", "home", "<>"),
+    "summary-not-contains": F("SUMMARY", "rain", "!contains"),
+    "dtend-not-contains": F("DTEND", datetime(2025, 1, 1, 11), "!contains"),
+    "categories-not-contains": F("categories", "work", "!contains"),
     "summary-contains-unicode": F("SUMMARY", "xyz", "contains", _unicode),
     "category-contains-unicode": F("category", "XYZ", "contains", _unicode),
 }
@@ -159,5 +173,40 @@ def test_expanded_recurrence_undef(undef_first: bool, summary: str, expected: in
     )
     for f in filters:
         searcher.add_property_filter(f.key, f.value, operator=f.operator)
+    result = searcher.check_component(event)
+    assert len(list(result or [])) == expected
+
+
+@pytest.mark.parametrize(
+    ("f", "expected"),
+    [
+        ## the master has no DTEND; the expanded occurrences gain a computed one
+        (F("DTEND", None, "def"), 0),
+        (F("DTEND", date(2025, 1, 2), "!="), 0),
+        (F("SUMMARY", None, "def"), 3),
+        (F("SUMMARY", "Stand", "!="), 3),
+        (F("SUMMARY", "Standup", "!="), 0),
+        (F("DTEND", date(2025, 1, 2), "!contains"), 0),
+        (F("SUMMARY", "xyz", "!contains"), 3),
+        (F("SUMMARY", "Stand", "!contains"), 0),
+    ],
+    ids=repr,
+)
+def test_expanded_recurrence_negation(f: F, expected: int) -> None:
+    """def and the negations on an expanded all-day recurrence.
+
+    Unlike undef, these are not skipped on the occurrences: the master's
+    verdict on DTEND has to stand, not the computed DTEND of an occurrence.
+    """
+    event = Event()
+    event.add("uid", "r1")
+    event.add("summary", "Standup")
+    event.add("dtstart", date(2025, 1, 1))
+    event.add("rrule", {"freq": "daily", "count": 3})
+
+    searcher = Searcher(
+        event=True, start=datetime(2025, 1, 1), end=datetime(2025, 1, 10), expand=True
+    )
+    searcher.add_property_filter(f.key, f.value, operator=f.operator)
     result = searcher.check_component(event)
     assert len(list(result or [])) == expected

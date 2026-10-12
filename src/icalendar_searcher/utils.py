@@ -13,6 +13,16 @@ from icalendar.prop import TypesFactory
 ## every loop iteration
 types_factory = TypesFactory()
 
+## Negated operators, mapped to the positive operator they negate.  A
+## negation matches when the property is defined and the positive
+## operator does not match.
+NEGATED_OPERATORS = {"!=": "==", "!contains": "contains"}
+
+## Operators that take no value, only checking whether the property is set
+PRESENCE_OPERATORS = ("def", "undef")
+
+SUPPORTED_OPERATORS = ("contains", "==", *NEGATED_OPERATORS, *PRESENCE_OPERATORS)
+
 
 ## Helper to normalize date/datetime for comparison
 ## (I feel this one is duplicated over many projects ...)

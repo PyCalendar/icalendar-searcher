@@ -1,6 +1,7 @@
 """Filtering logic for icalendar components."""
 
 from datetime import datetime, timedelta, tzinfo
+from typing import Any
 
 from icalendar import Component, error
 from icalendar.prop import vText
@@ -8,7 +9,7 @@ from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
 from . import comma_list
 from .collation import Collation, get_collation_function
-from .utils import _normalize_dt
+from .utils import NEGATED_OPERATORS, _normalize_dt
 
 
 class FilterMixin:
@@ -237,6 +238,13 @@ class FilterMixin:
 
         comp_key = key
         comp_value = component.get(comp_key)
+        if operator in NEGATED_OPERATORS:
+            positive = NEGATED_OPERATORS[operator]
+            return comp_key in component and not self._check_property_filter(
+                component, key, positive
+            )
+        if operator == "def":
+            return comp_key in component
         if operator == "undef":
             if skip_undef:
                 ## The base (master) element of this recurrence set already
@@ -266,39 +274,56 @@ class FilterMixin:
             if comp_key not in component:
                 return False
 
-            ## Compare the values This is tricky, as the values
-            ## may have different types.  TODO: we should add more
-            ## logic for the different property types.  Maybe get
-            ## it into the icalendar library.
-            if comp_value == filter_value:
-                return True
-            if isinstance(filter_value, str) and isinstance(comp_value, set):
-                return filter_value in comp_value
-
-            # For text properties, use collation for exact match comparison
-            if isinstance(filter_value, (str, vText)) and isinstance(comp_value, (str, vText)):
-                comp_str = str(comp_value)
-                filter_str = str(filter_value)
-
-                # Use collation-specific comparison
-                if collation == Collation.SIMPLE:
-                    if case_sensitive:
-                        return comp_str == filter_str
-                    else:
-                        return comp_str.lower() == filter_str.lower()
-                elif collation in (Collation.UNICODE, Collation.LOCALE):
-                    # For UNICODE/LOCALE collations, use sort keys for comparison
-                    # Two strings are equal if they have the same sort key
-                    from .collation import get_sort_key_function
-
-                    sort_key_fn = get_sort_key_function(collation, case_sensitive, locale)
-                    return sort_key_fn(comp_str) == sort_key_fn(filter_str)
-
-            return False
+            ## A property occurring more than once (COMMENT, ATTENDEE)
+            ## comes back as a list; it matches if any instance does.
+            instances = comp_value if isinstance(comp_value, list) else [comp_value]
+            return any(
+                self._values_equal(value, filter_value, collation, case_sensitive, locale)
+                for value in instances
+            )
         else:
             ## This shouldn't happen as add_property_filter validates operators
             raise NotImplementedError(f"Operator {operator} not implemented")
         return True
+
+    @staticmethod
+    def _values_equal(
+        comp_value: Any,
+        filter_value: Any,
+        collation: Collation,
+        case_sensitive: bool,
+        locale: str | None,
+    ) -> bool:
+        """The ``==`` comparison of one property instance."""
+        ## Compare the values This is tricky, as the values
+        ## may have different types.  TODO: we should add more
+        ## logic for the different property types.  Maybe get
+        ## it into the icalendar library.
+        if comp_value == filter_value:
+            return True
+        if isinstance(filter_value, str) and isinstance(comp_value, set):
+            return filter_value in comp_value
+
+        # For text properties, use collation for exact match comparison
+        if isinstance(filter_value, (str, vText)) and isinstance(comp_value, (str, vText)):
+            comp_str = str(comp_value)
+            filter_str = str(filter_value)
+
+            # Use collation-specific comparison
+            if collation == Collation.SIMPLE:
+                if case_sensitive:
+                    return comp_str == filter_str
+                else:
+                    return comp_str.lower() == filter_str.lower()
+            elif collation in (Collation.UNICODE, Collation.LOCALE):
+                # For UNICODE/LOCALE collations, use sort keys for comparison
+                # Two strings are equal if they have the same sort key
+                from .collation import get_sort_key_function
+
+                sort_key_fn = get_sort_key_function(collation, case_sensitive, locale)
+                return sort_key_fn(comp_str) == sort_key_fn(filter_str)
+
+        return False
 
     ## DISCLAIMER: Mostly AI-generated code, with a touch of human polishing
     ## and bugfixing. Alarms are a bit complex.

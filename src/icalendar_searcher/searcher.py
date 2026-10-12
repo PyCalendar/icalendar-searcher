@@ -15,7 +15,13 @@ from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 from . import comma_list
 from .collation import Collation, get_sort_key_function
 from .filters import FilterMixin
-from .utils import _iterable_or_false, _normalize_dt, types_factory
+from .utils import (
+    PRESENCE_OPERATORS,
+    SUPPORTED_OPERATORS,
+    _iterable_or_false,
+    _normalize_dt,
+    types_factory,
+)
 
 if TYPE_CHECKING:
     from caldav.calendarobjectresource import CalendarObjectResource
@@ -179,7 +185,7 @@ class Searcher(FilterMixin):
           - "==": exact match to at least one category name
           - Commas in filter values treated as literal characters
 
-        For the operator, the following is (planned to be) supported:
+        The following operators are supported:
 
         * contains - will do a substring match (A search for "summary"
           "contains" "rain" will return both events with summary
@@ -187,13 +193,23 @@ class Searcher(FilterMixin):
 
         * == - exact match is required
 
-        * ~ - regexp match
+        * !contains - the negation of contains: no substring match.
+          Like contains, it requires the property to be defined.  For
+          ordinary properties this is what a negated text-match means in
+          RFC 4791 section 9.7.5.  For "categories" it negates the exact
+          token match (not a substring match), so it has no server-side
+          equivalent.
 
-        * <, >, <=, >= - comparision
+        * != or <> - the negation of ==.  Both spellings are accepted;
+          the filter is stored as !=.  Like == and contains, it requires
+          the property to be defined, so a component without the
+          property does not match.  Use undef to find those.
 
-        * <> or != - inqueality, both supported
+        * def, undef - will match if the property is (not) defined.
+          The value is ignored and may be set to None.
 
-        * def, undef - will match if the property is (not) defined.  value can be set to None, the value will be ignored.
+        Not implemented yet (raise NotImplementedError): ~ (regexp
+        match) and the comparisons <, <=, >, >=.
 
         Examples:
             # Case-insensitive search (simple API)
@@ -213,9 +229,13 @@ class Searcher(FilterMixin):
         ## plural form splits on commas and matches exactly, the singular form
         ## keeps commas literal and matches substrings.
         key = key.lower()
-        if operator not in ("contains", "undef", "=="):
+        if operator == "<>":
+            operator = "!="
+        if operator not in SUPPORTED_OPERATORS:
             raise NotImplementedError(f"The operator {operator} is not supported yet.")
-        if operator != "undef":
+        if operator not in PRESENCE_OPERATORS:
+            if value is None:
+                raise ValueError(f"The operator {operator} needs a value, got None")
             if comma_list.is_comma_list_key(key):
                 self._property_filters[key] = comma_list.store_filter_value(key, value)
             else:
