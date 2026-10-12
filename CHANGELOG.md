@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-10-12
 
 ### Added
 
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`==` never matched a property occurring more than once** (`COMMENT`, `ATTENDEE`, `CONTACT`, ...): such a component has a list of values, which was compared as a whole.  It now matches if any instance equals the value, and `!=` if none does.
+- **`==` never matched a property occurring more than once** (`COMMENT`, `ATTENDEE`, `CONTACT`, ...): such a component has a list of values, which was compared as a whole.  It now matches if any instance equals the value.
 
 ## [1.0.8] - 2026-10-12
 
