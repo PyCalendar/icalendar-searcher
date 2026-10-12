@@ -1,6 +1,6 @@
 """Filtering logic for icalendar components."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 from icalendar import Component, error
 from icalendar.prop import vText
@@ -30,6 +30,7 @@ class FilterMixin:
         component: Component,
         _start: datetime | None = None,
         _end: datetime | None = None,
+        _tz: tzinfo | None = None,
     ) -> bool:
         """Check if a component falls within the time range specified by self.start and self.end.
 
@@ -39,6 +40,8 @@ class FilterMixin:
         :param _start: Effective start datetime (defaults to self.start).  Pass a pre-normalised
             value from check_component() to avoid mutating self.
         :param _end: Effective end datetime (defaults to self.end).  See _start.
+        :param _tz: Time zone for interpreting dates and floating datetimes in the component
+            (defaults to the time zone of the Python process).
         :return: True if the component matches the time range, False otherwise
         """
         ## Resolve effective values — callers may pass pre-computed normalised datetimes
@@ -56,35 +59,23 @@ class FilterMixin:
         ## icalendar library, and makes the logic here less complex
 
         try:
-            comp_end = _normalize_dt(component.end)
+            comp_end = _normalize_dt(component.end, _tz)
         except error.IncompleteComponent:
             comp_end = None
 
         try:
-            comp_start = _normalize_dt(component.start)
+            comp_start = _normalize_dt(component.start, _tz)
         except error.IncompleteComponent:
             if component.name == "VEVENT":
                 ## for events, DTSTART is mandatory
                 raise
             comp_start = None
 
-        if comp_name == "VEVENT":
-            ## comp_start is always set.
-            if not comp_end and isinstance(comp_start, datetime):
-                ## if comp_end is not set and comp_start is a datetime,
-                ## consider zero duration
-                comp_end = comp_start
-            elif not comp_end:
-                ## if comp_end is not set and comp_start is a datetime,
-                ## consider one day duration
-                comp_end = comp_start + timedelta(day=1)
-                ## TODO: What time of the day does the day change?
-                ## Time zones are difficult!  TODO: as for now,
-                ## self.start is a datetime, but in the future dates
-                ## should be allowed as well.  Then the time zone
-                ## problem for full-day events is at least simplified.
+        ## For a VEVENT without DTEND or DURATION, component.end already
+        ## gives zero duration for a datetime DTSTART and one day for a
+        ## date DTSTART (RFC 5545 section 3.6.1), so comp_end is always set.
 
-        elif comp_name == "VTODO":
+        if comp_name == "VTODO":
             ## There is a long matrix for VTODO in the RFC4701,
             ## section 9.9, and it may seem complicated, but it isn't
             ## that bad:
@@ -103,9 +94,9 @@ class FilterMixin:
             ##   — the task is open-ended from CREATED onward, so comp_end = DATE_MAX_DT.
             if not comp_start and not comp_end:
                 if "CREATED" in component:
-                    comp_start = _normalize_dt(component["CREATED"].dt)
+                    comp_start = _normalize_dt(component["CREATED"].dt, _tz)
                 if "COMPLETED" in component:
-                    comp_end = _normalize_dt(component["COMPLETED"].dt)
+                    comp_end = _normalize_dt(component["COMPLETED"].dt, _tz)
                 if comp_start and not comp_end:
                     comp_end = _normalize_dt(DATE_MAX_DT)
 
@@ -134,10 +125,13 @@ class FilterMixin:
             if not comp_start:
                 ## Journal without DTSTART doesn't match time ranges
                 return False
-            if isinstance(comp_start, datetime):
+            ## comp_start is normalised to a datetime, so look at the raw
+            ## DTSTART: a date means the journal spans that whole day
+            raw_start = component.start
+            if isinstance(raw_start, datetime):
                 comp_end = comp_start
             else:
-                comp_end = comp_start + timedelta(days=1)
+                comp_end = _normalize_dt(raw_start + timedelta(days=1), _tz)
 
         if comp_start == comp_end:
             ## Now the match requirement is start <= comp_end
@@ -313,6 +307,7 @@ class FilterMixin:
         component: Component,
         _alarm_start: datetime | None = None,
         _alarm_end: datetime | None = None,
+        _tz: tzinfo | None = None,
     ) -> bool:
         """Check if a component has alarms that fire within the alarm time range.
 
@@ -322,6 +317,8 @@ class FilterMixin:
         :param _alarm_start: Effective alarm start (defaults to self.alarm_start).  Pass a
             pre-normalised value from check_component() to avoid mutating self.
         :param _alarm_end: Effective alarm end (defaults to self.alarm_end).  See _alarm_start.
+        :param _tz: Time zone for interpreting dates and floating datetimes in the component
+            (defaults to the time zone of the Python process).
         :return: True if any alarm fires within the alarm range, False otherwise
         """
         from datetime import timedelta
@@ -343,11 +340,11 @@ class FilterMixin:
         comp_start = None
         comp_end = None
         try:
-            comp_start = _normalize_dt(component.start)
+            comp_start = _normalize_dt(component.start, _tz)
         except error.IncompleteComponent:
             pass
         try:
-            comp_end = _normalize_dt(component.end)
+            comp_end = _normalize_dt(component.end, _tz)
         except error.IncompleteComponent:
             pass
 
@@ -386,7 +383,7 @@ class FilterMixin:
                     continue
             else:
                 ## Absolute trigger - direct datetime
-                alarm_time = _normalize_dt(trigger_value)
+                alarm_time = _normalize_dt(trigger_value, _tz)
 
             ## Check for REPEAT and DURATION (repeating alarms/snooze functionality)
             ## Check all repetitions, not just the first alarm

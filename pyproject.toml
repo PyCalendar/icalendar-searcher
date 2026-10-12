@@ -14,7 +14,7 @@ requires-python = ">=3.10,<4.0"
 license = {text = "AGPL-3.0-or-later"}
 authors = [{ name = "Tobias Brox", email = "tobias@redpill-linpro.com" }]
 dependencies = [
-    "icalendar>=6.0",
+    "icalendar>=6.2.0",
     "recurring-ical-events>=3.8.0",
 ]
 

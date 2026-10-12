@@ -752,3 +752,16 @@ clothes.
 stale comment in `pyproject.toml` claiming `caldav`'s CI still exercises this library
 with Python 3.9 - `caldav` now requires 3.10 itself.  Not worth a budget line; worth
 doing next time somebody is in the file.
+
+**CI against the oldest allowed dependencies (1 h).**  CI installs only the newest
+`icalendar` and `recurring-ical-events`, so a declared floor is never tested.  The
+`icalendar>=6.0` floor survived until 2026-10 although the library failed at import
+with anything older than 6.2.0.  A CI job installing with `uv pip install
+--resolution lowest-direct` would catch that.
+
+**Recurring all-day journals (2 h).**  A `VJOURNAL` with a date `DTSTART` spans the
+whole day in a time-range search, but not when it recurs: `recurring_ical_events`
+gives each occurrence zero length, so expansion drops it unless the search range
+contains its midnight.  Padding the expansion window by a day and letting the
+range check cut it is the likely fix.  It touches the expansion path, including
+`expand_only`, and is the same idea as widening `caldav`'s server query.
