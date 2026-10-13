@@ -107,7 +107,7 @@ this library that has never had a real consumer.  See
 
 v1.0.6 was released 2026-05-29.  The `comma_list` consolidation that followed it
 is **not charged to the grant**, and everything below is measured against it.  It was
-never released on its own; it ships in v1.0.7 together with the Phase 1 fix.  Unlike
+never released on its own; it ships together with the Phase 1 fix.  Unlike
 the sibling projects, this work is small enough to be donated: the MoU has no line
 item for it, and none is claimed.
 
@@ -206,14 +206,14 @@ it is a wrong verdict rather than a missing one, and because it reaches every
 - [x] 1.1 The `filters.py:237` "latent bug" comment removed
 - [x] 1.1 Changelog entry
 - [x] 1.1 `caldav`'s own suite run against the release candidate, and the fallout read
-- [x] 1.1 The 1.0.7 release
+- [x] 1.1 The patch release
 
 The fix itself is half an hour.  The rest is the test matrix - every operator against
 every property class (ordinary, comma-list plural, comma-list singular, `undef`,
 expanded recurrences with `skip_undef`, singular `contains` under a non-`SIMPLE`
 collation) in both orders, roughly two hours - plus an
 hour to run `caldav`'s own suite against the release candidate and read the fallout,
-and half an hour for the changelog and the 1.0.7 release.
+and half an hour for the changelog and the release.
 
 ---
 
@@ -369,9 +369,9 @@ hidden by a fallback that says nothing.
 
 - The API gets a second boolean, `accent_sensitive`, beside `case_sensitive`, on
   `add_property_filter()`, `add_sort_key()` and the `collation` module's functions.
-  Both default to `True`, which keeps the ICU strengths of 1.1 - so **`==` does not
-  change** and the change is additive (1.2.0, not a behaviour change under a frozen
-  1.x).
+  Both default to `True`, which keeps the existing ICU strengths - so **`==` does
+  not change** and the change is additive (a minor release, not a behaviour change
+  under a frozen 1.x).
 - ICU mapping: case+accents TERTIARY; accents only SECONDARY; neither PRIMARY; case
   only PRIMARY with `CASE_LEVEL=ON`.  `StringSearch` ignores `CASE_LEVEL`, so in the
   last case each match is checked again with `Collator.compare`.
@@ -395,8 +395,8 @@ sends on the wire; getting it wrong is expensive in a way that a late implementa
 is not.  If anything in this phase slips, it should be 3.4, not 3.1.
 
 Note that 3.1 may conclude that `==` has to change too.  That is a behaviour change
-on a stable API, and if it happens it goes out in 1.1.0 with the operators rather
-than quietly in a patch.
+on a stable API, and if it happens it goes out in a minor release rather than
+quietly in a patch.
 
 ---
 
@@ -525,24 +525,24 @@ for the comparison operators under
 
 | Release | Contents | After |
 |---|---|---|
-| 1.0.7 | Conjunctive property filters, together with the `comma_list` consolidation *(baseline, not charged to the grant)* | Phase 1 |
-| 1.1.0 | `!=`, `<>`, `!contains`, `def` | Phase 2 |
-| 1.2.0 | `accent_sensitive`; collation-aware substring matching (the decision left `==` unchanged) | Phase 3 |
-| 1.1.x | The Phase 5 findings, as they are fixed | Phase 5 |
-| 1.1.x | Usage guide, API reference and a repaired README, in-repository | Phase 4 (funded part) |
+| patch | Conjunctive property filters, together with the `comma_list` consolidation *(baseline, not charged to the grant)* | Phase 1 |
+| minor | `!=`, `<>`, `!contains`, `def` | Phase 2 |
+| minor | `accent_sensitive`; collation-aware substring matching (the decision left `==` unchanged) | Phase 3 |
+| patch | The Phase 5 findings, as they are fixed | Phase 5 |
+| patch | Usage guide, API reference and a repaired README, in-repository | Phase 4 (funded part) |
 | *unscheduled* | A published documentation site, and executable examples | Phase 4's unfunded 12 hours |
 
-1.0.7 is deliberately its own patch release, ahead of the feature work.  `caldav`
+The Phase 1 fix is deliberately its own patch release, ahead of the feature work.  `caldav`
 pins `>=1.0.5,<2`, so it reaches users on their next `pip install -U` without any
 action on `caldav`'s part, and there is no reason to make a correctness fix wait for
 a feature.
 
-1.1.0 is a minor bump because it adds operators.  It should be coordinated with
+The Phase 2 release is a minor bump because it adds operators.  It should be coordinated with
 `caldav`'s #568 work so that the CalDAV XML side and the client-side fallback land
 in the same `caldav` release as the operator they depend on.
 
 Phase 5 has no release of its own because its output is findings rather than a
-feature.  Whether it produces a 1.1.1 or nothing at all is not knowable in advance,
+feature.  Whether it produces a patch release or nothing at all is not knowable in advance,
 and a roadmap that promised otherwise would be promising that the bugs exist.
 
 The last row is the honest one: two documentation items have no scheduled release
