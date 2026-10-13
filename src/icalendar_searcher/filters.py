@@ -1,5 +1,6 @@
 """Filtering logic for icalendar components."""
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, tzinfo
 from typing import Any
 
@@ -8,7 +9,7 @@ from icalendar.prop import vText
 from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
 from . import comma_list
-from .collation import Collation, get_collation_function
+from .collation import Collation, get_collation_function, get_equality_function
 from .utils import NEGATED_OPERATORS, _normalize_dt
 
 
@@ -24,6 +25,7 @@ class FilterMixin:
     - _property_operator: dict of property operators
     - _property_collation: dict of property collations
     - _property_locale: dict of property locales
+    - _property_case_sensitive, _property_accent_sensitive: dicts of bools
     """
 
     def _check_range(
@@ -217,6 +219,7 @@ class FilterMixin:
         collation = self._property_collation.get(key, Collation.SIMPLE)
         locale = self._property_locale.get(key)
         case_sensitive = self._property_case_sensitive.get(key, True)
+        accent_sensitive = self._property_accent_sensitive.get(key, True)
 
         ## Comma-token-list properties (CATEGORIES; see comma_list.py) carry
         ## their own plural/singular matching semantics.  Delegate the whole
@@ -233,6 +236,7 @@ class FilterMixin:
                 collation=collation,
                 case_sensitive=case_sensitive,
                 locale=locale,
+                accent_sensitive=accent_sensitive,
             )
             return matched
 
@@ -266,7 +270,9 @@ class FilterMixin:
             filter_str = str(filter_value)
 
             # Use collation function for text matching
-            collation_fn = get_collation_function(collation, case_sensitive, locale)
+            collation_fn = get_collation_function(
+                collation, case_sensitive, locale, accent_sensitive
+            )
             if not collation_fn(filter_str, comp_str):
                 return False
         elif operator == "==":
@@ -277,10 +283,8 @@ class FilterMixin:
             ## A property occurring more than once (COMMENT, ATTENDEE)
             ## comes back as a list; it matches if any instance does.
             instances = comp_value if isinstance(comp_value, list) else [comp_value]
-            return any(
-                self._values_equal(value, filter_value, collation, case_sensitive, locale)
-                for value in instances
-            )
+            text_equal = get_equality_function(collation, case_sensitive, locale, accent_sensitive)
+            return any(self._values_equal(value, filter_value, text_equal) for value in instances)
         else:
             ## This shouldn't happen as add_property_filter validates operators
             raise NotImplementedError(f"Operator {operator} not implemented")
@@ -290,9 +294,7 @@ class FilterMixin:
     def _values_equal(
         comp_value: Any,
         filter_value: Any,
-        collation: Collation,
-        case_sensitive: bool,
-        locale: str | None,
+        text_equal: Callable[[str, str], bool],
     ) -> bool:
         """The ``==`` comparison of one property instance."""
         ## Compare the values This is tricky, as the values
@@ -306,22 +308,7 @@ class FilterMixin:
 
         # For text properties, use collation for exact match comparison
         if isinstance(filter_value, (str, vText)) and isinstance(comp_value, (str, vText)):
-            comp_str = str(comp_value)
-            filter_str = str(filter_value)
-
-            # Use collation-specific comparison
-            if collation == Collation.SIMPLE:
-                if case_sensitive:
-                    return comp_str == filter_str
-                else:
-                    return comp_str.lower() == filter_str.lower()
-            elif collation in (Collation.UNICODE, Collation.LOCALE):
-                # For UNICODE/LOCALE collations, use sort keys for comparison
-                # Two strings are equal if they have the same sort key
-                from .collation import get_sort_key_function
-
-                sort_key_fn = get_sort_key_function(collation, case_sensitive, locale)
-                return sort_key_fn(comp_str) == sort_key_fn(filter_str)
+            return text_equal(str(comp_value), str(filter_value))
 
         return False
 
