@@ -8,9 +8,6 @@ of the Python process.  See
 https://github.com/pycalendar/icalendar-searcher/issues/17
 """
 
-import os
-import time
-from collections.abc import Iterator
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -19,24 +16,7 @@ from icalendar import Alarm, Calendar, Event, Journal, Todo
 
 from icalendar_searcher import Searcher
 
-PROCESS_TIMEZONES = ["Europe/Berlin", "UTC", "America/New_York", "Asia/Tokyo"]
 SEARCH_TIMEZONES = ["Europe/Berlin", "America/Los_Angeles", "Asia/Kolkata"]
-
-
-@pytest.fixture(params=PROCESS_TIMEZONES)
-def process_tz(request: pytest.FixtureRequest) -> Iterator[str]:
-    """Run the test with the process local time zone set to each of PROCESS_TIMEZONES."""
-    orig = os.environ.get("TZ")
-    os.environ["TZ"] = request.param
-    time.tzset()
-    try:
-        yield request.param
-    finally:
-        if orig is None:
-            del os.environ["TZ"]
-        else:
-            os.environ["TZ"] = orig
-        time.tzset()
 
 
 def _cal(*components: Event | Todo | Journal) -> Calendar:

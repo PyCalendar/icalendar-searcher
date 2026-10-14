@@ -1,7 +1,7 @@
 """Filtering logic for icalendar components."""
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from typing import Any
 
 from icalendar import Component, error
@@ -10,7 +10,17 @@ from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
 from . import comma_list
 from .collation import Collation, get_collation_function, get_equality_function
-from .utils import NEGATED_OPERATORS, _normalize_dt
+from .utils import DT_MAX, DT_MIN, NEGATED_OPERATORS, _normalize_dt, _shift
+
+
+def _component_end(component: Component) -> date | datetime:
+    """``component.end``, or the end of the datetime range that icalendar's
+    DTSTART + DURATION overflowed past."""
+    try:
+        return component.end
+    except OverflowError:
+        duration = component.get("DURATION")
+        return DT_MIN if duration is not None and duration.dt < timedelta(0) else DT_MAX
 
 
 class FilterMixin:
@@ -62,7 +72,7 @@ class FilterMixin:
         ## icalendar library, and makes the logic here less complex
 
         try:
-            comp_end = _normalize_dt(component.end, _tz)
+            comp_end = _normalize_dt(_component_end(component), _tz)
         except error.IncompleteComponent:
             comp_end = None
 
@@ -134,13 +144,13 @@ class FilterMixin:
             if isinstance(raw_start, datetime):
                 comp_end = comp_start
             else:
-                comp_end = _normalize_dt(raw_start + timedelta(days=1), _tz)
+                comp_end = _normalize_dt(_shift(raw_start, timedelta(days=1)), _tz)
 
         if comp_start == comp_end:
             ## Now the match requirement is start <= comp_end
             ## while otherwise the match requirement is start < comp_end
             ## minor detail, we'll work around it:
-            comp_end += timedelta(seconds=1)
+            comp_end = _shift(comp_end, timedelta(seconds=1))
 
         ## After the logic above, all rows in the matrix boils down to
         ## this: (we could reduce it even more by defaulting
@@ -356,7 +366,7 @@ class FilterMixin:
         except error.IncompleteComponent:
             pass
         try:
-            comp_end = _normalize_dt(component.end, _tz)
+            comp_end = _normalize_dt(_component_end(component), _tz)
         except error.IncompleteComponent:
             pass
 
@@ -387,9 +397,9 @@ class FilterMixin:
 
                 ## Calculate alarm time based on RELATED and component type
                 if related == "END" and comp_end:
-                    alarm_time = comp_end + trigger_delta
+                    alarm_time = _shift(comp_end, trigger_delta)
                 elif comp_start:
-                    alarm_time = comp_start + trigger_delta
+                    alarm_time = _shift(comp_start, trigger_delta)
                 else:
                     ## No start, end, or due to relate to
                     continue
@@ -406,7 +416,7 @@ class FilterMixin:
                 if duration:
                     ## Check each repetition
                     for i in range(int(repeat_count) + 1):
-                        repeat_time = alarm_time + (duration * i)
+                        repeat_time = _shift(alarm_time, duration * i)
                         ## Check if this repetition fires within the alarm range
                         if alarm_start and alarm_end:
                             if alarm_start <= repeat_time < alarm_end:

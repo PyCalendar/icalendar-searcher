@@ -5,23 +5,67 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any
 
 import recurring_ical_events
-from icalendar import Calendar, Component, Timezone
+from icalendar import Calendar, Component, Timezone, error
 from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
 from . import comma_list
 from .collation import Collation, get_sort_key_function
 from .filters import FilterMixin
 from .utils import (
+    DT_MAX,
+    DT_MIN,
     PRESENCE_OPERATORS,
     SUPPORTED_OPERATORS,
     _iterable_or_false,
     _normalize_dt,
+    _shift,
     types_factory,
 )
+
+## recurring_ical_events widens the expansion window by the duration of an
+## occurrence (and by how far a modification moved), which overflows near the
+## ends of the datetime range.  Only search bounds this close to an end get
+## the window narrowed; ordinary searches are expanded as given.
+_EDGE_ZONE = timedelta(days=2 * 366)
+## The margin when a component is too odd to compute one from
+_FALLBACK_MARGIN = timedelta(days=366)
+
+
+def _as_kind_of(value: date | datetime, limit: datetime) -> date | datetime:
+    """The aware ``limit`` as the same kind as ``value``: aware, naive or date."""
+    if isinstance(value, datetime):
+        return limit if value.tzinfo else limit.replace(tzinfo=None)
+    return limit.date()
+
+
+def _near_edge(value: date | datetime) -> bool:
+    return value < _as_kind_of(value, _shift(DT_MIN, _EDGE_ZONE)) or value > _as_kind_of(
+        value, _shift(DT_MAX, -_EDGE_ZONE)
+    )
+
+
+def _expansion_margin(components: list[Component]) -> timedelta:
+    """How far inside the ends of the datetime range to keep the window.
+
+    That is as far as recurring_ical_events may widen it, plus a day, since
+    naive and date bounds are read in the event's time zone.
+    """
+    margin = timedelta(0)
+    try:
+        for component in components:
+            start, end = _normalize_dt(component.start), _normalize_dt(component.end)
+            margin = max(margin, end - start)
+            recurrence_id = component.get("RECURRENCE-ID")
+            if recurrence_id is not None and recurrence_id.params.get("RANGE") == "THISANDFUTURE":
+                margin = max(margin, end - start + abs(start - _normalize_dt(recurrence_id.dt)))
+    except (error.IncompleteComponent, OverflowError, TypeError, ValueError):
+        return _FALLBACK_MARGIN
+    return margin + timedelta(days=1)
+
 
 if TYPE_CHECKING:
     from caldav.calendarobjectresource import CalendarObjectResource
@@ -963,5 +1007,17 @@ class Searcher(FilterMixin):
         # Use local variables for start/end to avoid modifying searcher state
         start = self.start if self.start else _normalize_dt(DATE_MIN_DT)
         end = self.end if self.end else _normalize_dt(DATE_MAX_DT)
+
+        if _near_edge(start) or _near_edge(end):
+            ## See _EDGE_ZONE.  Occurrences within the margin of the ends
+            ## of the datetime range are left out.
+            margin = _expansion_margin(recurrence_set)
+            start = max(start, _as_kind_of(start, _shift(DT_MIN, margin)))
+            end = min(end, _as_kind_of(end, _shift(DT_MAX, -margin)))
+            try:
+                if start >= end:
+                    return []
+            except TypeError:  ## a date and a datetime bound
+                pass
 
         return recur.between(start, end)

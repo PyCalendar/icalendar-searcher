@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
-from datetime import date, datetime, time, tzinfo
+from collections.abc import Callable, Iterable, Iterator
+from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from itertools import tee
 
 from icalendar.prop import TypesFactory
@@ -41,11 +41,46 @@ def _normalize_dt(dt_value: date | datetime, tz: tzinfo | None = None) -> dateti
     if tz is not None and dt_value.tzinfo is None:
         ## pytz tzinfo objects carry a fixed offset and must be applied with localize()
         if hasattr(tz, "localize"):
-            dt_value = tz.localize(dt_value)
+            try:
+                dt_value = tz.localize(dt_value)
+            except (OverflowError, ValueError):
+                dt_value = dt_value.replace(
+                    tzinfo=_edge_offset(dt_value, lambda d: tz.localize(d).utcoffset())
+                )
         else:
             dt_value = dt_value.replace(tzinfo=tz)
     ## A fixed offset makes timedelta arithmetic exact, also across DST changes
-    return dt_value.astimezone()
+    try:
+        return dt_value.astimezone()
+    except (OverflowError, ValueError):
+        ## Within a day of datetime.min / datetime.max, the value may not
+        ## exist in the process time zone.  Aware datetimes compare fine
+        ## across time zones, so keep it in its own.
+        if dt_value.tzinfo is None:
+            dt_value = dt_value.replace(
+                tzinfo=_edge_offset(dt_value, lambda d: d.astimezone().utcoffset())
+            )
+        return dt_value
+
+
+def _edge_offset(dt_value: datetime, offset_at: Callable[[datetime], timedelta]) -> timezone:
+    """The UTC offset for a naive value at the end of the datetime range,
+    taken from a value two days further inside it, as that one still has one."""
+    inwards = timedelta(days=-2 if dt_value.year == datetime.max.year else 2)
+    return timezone(offset_at(dt_value + inwards))
+
+
+## The ends of the datetime range, as aware values
+DT_MIN = datetime.min.replace(tzinfo=timezone.utc)
+DT_MAX = datetime.max.replace(tzinfo=timezone.utc)
+
+
+def _shift(dt_value: date | datetime, delta: timedelta) -> date | datetime:
+    """``dt_value + delta``, clamped to DT_MIN / DT_MAX instead of overflowing."""
+    try:
+        return dt_value + delta
+    except OverflowError:
+        return DT_MAX if delta > timedelta(0) else DT_MIN
 
 
 ## Helper - generators are generally more neat than lists,
