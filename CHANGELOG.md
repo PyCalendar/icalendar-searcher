@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`accent_sensitive` parameter** for `add_property_filter()` and `add_sort_key()`, independent of `case_sensitive`.  With `accent_sensitive=False`, "muller" matches "Müller".  It defaults to `True`, so existing searches are unaffected.  Under `Collation.UNICODE` and `Collation.LOCALE` the two parameters select the ICU collator strength (and `CASE_LEVEL`); under `Collation.SIMPLE` accents are folded by stripping combining marks after NFD decomposition.  What counts as an accent is locale-dependent - in `nb_NO`, "ø" and "å" are letters of their own - and the README now says so.  `get_equality_function()` is new in the `collation` module, and its three `get_*_function()` functions take `accent_sensitive` too.
+
+### Fixed
+
+- **`contains` ignored `Collation.UNICODE` and `Collation.LOCALE`**: substring matching silently fell back to Python's `in` operator, so a `tr_TR` search for "istanbul" did not find "İstanbul", although `==` did.  `contains` and `!contains` now use ICU `StringSearch` with the same collator as `==`.  This also applies to case-sensitive searches, which no longer compare code points: for instance, ignorable characters such as soft hyphens are now skipped.
+
+- **`==` and `!=` on `category`/`categories` ignored the collation**, comparing case only.  They now honour it like the other text properties.
+
 ## [1.1.0] - 2026-10-12
 
 ### Added

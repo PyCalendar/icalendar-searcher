@@ -134,11 +134,13 @@ class Searcher(FilterMixin):
     _sort_collation: dict = field(default_factory=dict)
     _sort_locale: dict = field(default_factory=dict)
     _sort_case_sensitive: dict = field(default_factory=dict)
+    _sort_accent_sensitive: dict = field(default_factory=dict)
     _property_filters: dict = field(default_factory=dict)
     _property_operator: dict = field(default_factory=dict)
     _property_collation: dict = field(default_factory=dict)
     _property_locale: dict = field(default_factory=dict)
     _property_case_sensitive: dict = field(default_factory=dict)
+    _property_accent_sensitive: dict = field(default_factory=dict)
 
     def add_property_filter(
         self,
@@ -148,6 +150,7 @@ class Searcher(FilterMixin):
         case_sensitive: bool = True,
         collation: Collation | None = None,
         locale: str | None = None,
+        accent_sensitive: bool = True,
     ) -> None:
         """Adds a filter for some specific iCalendar property.
 
@@ -161,12 +164,17 @@ class Searcher(FilterMixin):
         :param operator: Comparision operator ("contains", "==", etc)
         :param case_sensitive: If False, text comparisons are case-insensitive.
         :param collation: Advanced collation strategy for text comparison.
-                         If specified, overrides case_sensitive parameter.
-                         Only needed by power users for locale-aware collation.
+                         Only needed by power users for Unicode or
+                         locale-aware collation.
         :param locale: Locale string (e.g., "de_DE") for locale-aware collation.
                       Only used with collation=Collation.LOCALE.
+        :param accent_sensitive: If False, text comparisons ignore accents,
+                      so "muller" matches "Müller".  What counts as an
+                      accent depends on the collation and locale, see
+                      the collation module.
 
-        The case_sensitive parameter only applies to text properties.
+        The case_sensitive and accent_sensitive parameters only apply
+        to text properties, and to all the text operators alike.
         The default has been made for case sensitive searches.  This
         is contrary to the CalDAV standard, where case insensitive
         searches are considered the default, but it's in accordance
@@ -247,12 +255,12 @@ class Searcher(FilterMixin):
             # Power user specified explicit collation
             self._property_collation[key] = collation
             self._property_locale[key] = locale
-            self._property_case_sensitive[key] = case_sensitive
         else:
-            # Simple API: use SIMPLE collation with case_sensitive parameter
+            # Simple API: use SIMPLE collation
             self._property_collation[key] = Collation.SIMPLE
             self._property_locale[key] = None
-            self._property_case_sensitive[key] = case_sensitive
+        self._property_case_sensitive[key] = case_sensitive
+        self._property_accent_sensitive[key] = accent_sensitive
 
     def add_sort_key(
         self,
@@ -261,6 +269,7 @@ class Searcher(FilterMixin):
         case_sensitive: bool = True,
         collation: Collation | None = None,
         locale: str | None = None,
+        accent_sensitive: bool = True,
     ) -> None:
         """Add a sort key for sorting components.
 
@@ -275,9 +284,9 @@ class Searcher(FilterMixin):
         :param case_sensitive: If False, text sorting is case-insensitive.
                               Only applies to text properties. Default is True.
         :param collation: Advanced collation strategy for text sorting.
-                         If specified, overrides case_sensitive parameter.
         :param locale: Locale string (e.g., "de_DE") for locale-aware sorting.
                       Only used with collation=Collation.LOCALE.
+        :param accent_sensitive: If False, text sorting ignores accents.
 
         Examples:
             # Case-insensitive sorting (simple API)
@@ -301,12 +310,12 @@ class Searcher(FilterMixin):
             # Power user specified explicit collation
             self._sort_collation[key] = collation
             self._sort_locale[key] = locale
-            self._sort_case_sensitive[key] = case_sensitive
         else:
             # Simple API
             self._sort_collation[key] = Collation.SIMPLE
             self._sort_locale[key] = None
-            self._sort_case_sensitive[key] = case_sensitive
+        self._sort_case_sensitive[key] = case_sensitive
+        self._sort_accent_sensitive[key] = accent_sensitive
 
     def check_component(
         self,
@@ -822,7 +831,10 @@ class Searcher(FilterMixin):
                 collation = self._sort_collation[sort_key]
                 locale = self._sort_locale.get(sort_key)
                 case_sensitive = self._sort_case_sensitive.get(sort_key, True)
-                sort_key_fn = get_sort_key_function(collation, case_sensitive, locale)
+                accent_sensitive = self._sort_accent_sensitive.get(sort_key, True)
+                sort_key_fn = get_sort_key_function(
+                    collation, case_sensitive, locale, accent_sensitive
+                )
                 val = sort_key_fn(val)
 
             if reverse:

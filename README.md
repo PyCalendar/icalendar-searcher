@@ -92,33 +92,64 @@ searcher.add_property_filter("categories", "WORK,URGENT", operator="contains")
 searcher.add_property_filter("category", "out", operator="contains")
 ```
 
+### Accents
+
+Accent sensitivity is a separate axis from case sensitivity.  With `accent_sensitive=False`, "muller" matches "Müller":
+
+```python
+searcher.add_property_filter("SUMMARY", "muller", case_sensitive=False, accent_sensitive=False)
+```
+
+Both parameters default to `True`, and both apply to all the text operators alike (`contains`, `==`, their negations, and `category`/`categories`), as well as to `add_sort_key()`.
+
+Without PyICU, accents are folded by stripping combining marks after Unicode NFD decomposition.  That knows nothing about languages, and leaves letters without a decomposition (ø, æ, ß, ł) alone.
+
 ### Advanced Collation (requires PyICU)
 
-For advanced Unicode and locale-aware text comparison, install with:
+For Unicode and locale-aware text comparison, install with:
 
 ```bash
 pip install 'icalendar-searcher[collation]'
 ```
 
-Locale-specific collation is useful for proper handling of language-specific characters:
+`Collation.UNICODE` uses the root collation of the Unicode Collation Algorithm, and `Collation.LOCALE` the CLDR rules of the given locale.  The two axes map onto the ICU collator like this:
+
+| `case_sensitive` | `accent_sensitive` | ICU collator |
+|---|---|---|
+| `True` (default) | `True` (default) | TERTIARY strength |
+| `False` | `True` | SECONDARY strength |
+| `False` | `False` | PRIMARY strength |
+| `True` | `False` | PRIMARY strength, `CASE_LEVEL` on |
+
+**There is no language-independent right answer** to what is an accent and what is a letter of its own, and the locale decides:
 
 ```python
 from icalendar_searcher.collation import Collation
 
-# Turkish locale: İstanbul matches "istanbul" (Turkish İ → i)
-searcher.add_property_filter("LOCATION", "istanbul",
-                            collation=Collation.LOCALE,
-                            locale="tr_TR",
-                            case_sensitive=False)
+# German: ü is an accented u - "muller" matches "Müller"
+searcher.add_property_filter("SUMMARY", "muller", collation=Collation.LOCALE, locale="de_DE",
+                             case_sensitive=False, accent_sensitive=False)
 
-# Without Turkish locale, İstanbul won't match "istanbul"
-searcher.add_property_filter("LOCATION", "istanbul",
-                            collation=Collation.UNICODE,
-                            case_sensitive=False)  # Won't match İstanbul
+# Scandinavian: å, æ/ä and ø/ö are letters of their own - under nb_NO (or sv_SE,
+# da_DK), "smorgasbord" does NOT match "smörgåsbord", nor "blabaersyltetoy"
+# "blåbærsyltetøy".  Under Collation.UNICODE (root) both match - note that root
+# folds æ to "ae", so "blabarsyltetoy" does not.
+searcher.add_property_filter("SUMMARY", "smorgasbord", collation=Collation.LOCALE, locale="nb_NO",
+                             case_sensitive=False, accent_sensitive=False)
+
+# Turkish: İ is the capital of i (and I the capital of ı) - "istanbul" matches "İstanbul",
+# but "ISTANBUL" does not.  Under Collation.UNICODE, İ is an I with an accent, so
+# "istanbul" only matches with accent_sensitive=False.
+searcher.add_property_filter("LOCATION", "istanbul", collation=Collation.LOCALE, locale="tr_TR",
+                             case_sensitive=False)
 
 # Locale-aware sorting (e.g., Norwegian sorts æ, ø, å after z)
 searcher.add_sort_key("SUMMARY", collation=Collation.LOCALE, locale="nb_NO")
 ```
+
+Substring matching (`contains`) uses ICU's `StringSearch` with the same collator as `==`, so the two operators agree.
+
+**CalDAV servers cannot do this.**  The collations CalDAV servers are required to support (RFC 4791 section 7.5) are `i;octet` (case- and accent-sensitive) and `i;ascii-casemap` (case-insensitive for ASCII letters only); `i;unicode-casemap` (RFC 5051) folds case but not accents.  None of them is accent-insensitive, and none is locale-aware, so a client like `caldav` has to filter such searches client-side.
 
 ## Related projects
 

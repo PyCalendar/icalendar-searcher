@@ -107,7 +107,7 @@ this library that has never had a real consumer.  See
 
 v1.0.6 was released 2026-05-29.  The `comma_list` consolidation that followed it
 is **not charged to the grant**, and everything below is measured against it.  It was
-never released on its own; it ships in v1.0.7 together with the Phase 1 fix.  Unlike
+never released on its own; it ships together with the Phase 1 fix.  Unlike
 the sibling projects, this work is small enough to be donated: the MoU has no line
 item for it, and none is claimed.
 
@@ -206,14 +206,14 @@ it is a wrong verdict rather than a missing one, and because it reaches every
 - [x] 1.1 The `filters.py:237` "latent bug" comment removed
 - [x] 1.1 Changelog entry
 - [x] 1.1 `caldav`'s own suite run against the release candidate, and the fallout read
-- [x] 1.1 The 1.0.7 release
+- [x] 1.1 The patch release
 
 The fix itself is half an hour.  The rest is the test matrix - every operator against
 every property class (ordinary, comma-list plural, comma-list singular, `undef`,
 expanded recurrences with `skip_undef`, singular `contains` under a non-`SIMPLE`
 collation) in both orders, roughly two hours - plus an
 hour to run `caldav`'s own suite against the release candidate and read the fallout,
-and half an hour for the changelog and the 1.0.7 release.
+and half an hour for the changelog and the release.
 
 ---
 
@@ -261,7 +261,7 @@ over, and tests written against it would pin the wrong behaviour.
 - [x] 2.1 Semantics of `!=` / `<>` settled and written down, including undefined properties
 - [x] 2.1 `!=` / `<>` implemented for ordinary and comma-list properties
 - [x] 2.1 Tests: ordinary and comma-list, plural and singular, property present and absent
-- [ ] 2.1 Agreement with `caldav`'s `negate-condition` XML builder verified
+- [x] 2.1 Agreement with `caldav`'s `negate-condition` XML builder verified
 - [x] 2.2 `def` implemented
 - [x] 2.2 Docstring operator list reduced to what exists; the rest listed as not implemented, matching the README
 
@@ -274,7 +274,7 @@ defined) and leave the verdict to the client-side filter.  `caldav`'s builder us
 to send a *positive* `text-match` for `!=` (the opposite result set) and raise
 `KeyError` for `def`.  The `caldav` side of the fix - the builder, and a client-side
 fallback for all three operators - is written (`caldav` work, outside this budget),
-but not yet merged; the last 2.1 box is ticked when it is.  Until `caldav-server-tester`
+and was merged in https://github.com/python-caldav/caldav/pull/750 on 2026-10-12.  Until `caldav-server-tester`
 probes which servers honour `negate-condition`, `caldav` never sends the negations
 to the server.
 
@@ -336,11 +336,12 @@ behaviour shows it:
 
 Three things follow.  First, simply wiring `StringSearch` to the existing strength
 mapping would *not* fix the `Müller` case, because case-insensitive is not
-accent-insensitive - expressing "ignore case, respect accents" needs
-`CASE_LEVEL=ON` at PRIMARY strength, which is a second knob the API does not have.
+accent-insensitive - "ignore accents" needs PRIMARY strength, and "respect case,
+ignore accents" needs `CASE_LEVEL=ON` at PRIMARY strength, a second knob the API
+does not have.
 Second, there is no globally correct answer: `smörgåsbord` does not match
-`smorgasbord` under `nb_NO` and that is *right*, because ö and å are distinct
-letters in Norwegian rather than decorated o and a.  The answer is locale-dependent
+`smorgasbord` under `nb_NO` and that is *right*, because ö (= ø) and å are
+distinct letters in the Scandinavian languages rather than decorated o and a.  The answer is locale-dependent
 by construction.  Third, `==` under a non-simple collation compares ICU sort keys
 and therefore inherits exactly the same conflation - so making `contains` consistent
 with `==` may mean changing `==`, which is API-visible behaviour under a frozen 1.x.
@@ -357,12 +358,35 @@ hidden by a fallback that says nothing.
 | 3.4 Collation documentation | The README's collation section rewritten around the axes as decided, saying plainly that the correct answer is locale-dependent | 1 |
 
 **Tasks:**
-- [ ] 3.1 The collation axes decided and written down, mapped onto ICU and the CalDAV collation names
-- [ ] 3.1 The false comment at `collation.py:187` deleted
-- [ ] 3.2 Collation-aware `contains` on ICU `StringSearch`, consistent with `==`
-- [ ] 3.2 `==` and `!=` on `category`/`categories` honour the collation (`comma_list` compares case only today)
-- [ ] 3.3 Collation test matrix (de_DE / tr_TR / nb_NO / root, both axes, both operators)
-- [ ] 3.4 README collation section rewritten
+- [x] 3.1 The collation axes decided and written down, mapped onto ICU and the CalDAV collation names
+- [x] 3.1 The false comment at `collation.py:187` deleted
+- [x] 3.2 Collation-aware `contains` on ICU `StringSearch`, consistent with `==`
+- [x] 3.2 `==` and `!=` on `category`/`categories` honour the collation (`comma_list` compares case only today)
+- [x] 3.3 Collation test matrix (de_DE / tr_TR / nb_NO / root, both axes, both operators)
+- [x] 3.4 README collation section rewritten
+
+**Decision (2026-10-13):**
+
+- The API gets a second boolean, `accent_sensitive`, beside `case_sensitive`, on
+  `add_property_filter()`, `add_sort_key()` and the `collation` module's functions.
+  Both default to `True`, which keeps the existing ICU strengths - so **`==` does
+  not change** and the change is additive (a minor release, not a behaviour change
+  under a frozen 1.x).
+- ICU mapping: case+accents TERTIARY; accents only SECONDARY; neither PRIMARY; case
+  only PRIMARY with `CASE_LEVEL=ON`.  `StringSearch` ignores `CASE_LEVEL`, so in the
+  last case each match is checked again with `Collator.compare`.
+- `contains`, `==`, their negations and `category`/`categories` all use the same
+  collator; `==` compares sort keys, `contains` uses `StringSearch`.
+- `Collation.SIMPLE` folds accents by stripping combining marks after NFD.  It is
+  locale-blind and leaves ø, æ, ß alone.
+- Deliberately locale-dependent: what an accent is.  `nb_NO` keeps ø/å apart from
+  o/a, `tr_TR` treats ü as a letter and pairs I with ı.  The README says so.
+- CalDAV: `i;octet` is case+accents, `i;ascii-casemap` and `i;unicode-casemap` fold
+  case only, and none is accent-insensitive or locale-aware.  `caldav` must therefore
+  send no `text-match` when `accent_sensitive=False` (a server would return a subset),
+  and should treat `Collation.LOCALE` as client-side too.  Its `_collation_to_caldav`
+  maps `LOCALE` to `i;ascii-casemap` even when case-sensitive; that is a superset
+  and harmless only while the client post-filters.  Both are `caldav` work.
 
 3.1 is the item and 3.2 to 3.4 are its consequences, which is why they are listed
 separately even though all four are funded.  3.1 is an API decision under a 1.x that
@@ -371,8 +395,8 @@ sends on the wire; getting it wrong is expensive in a way that a late implementa
 is not.  If anything in this phase slips, it should be 3.4, not 3.1.
 
 Note that 3.1 may conclude that `==` has to change too.  That is a behaviour change
-on a stable API, and if it happens it goes out in 1.1.0 with the operators rather
-than quietly in a patch.
+on a stable API, and if it happens it goes out in a minor release rather than
+quietly in a patch.
 
 ---
 
@@ -501,23 +525,24 @@ for the comparison operators under
 
 | Release | Contents | After |
 |---|---|---|
-| 1.0.7 | Conjunctive property filters, together with the `comma_list` consolidation *(baseline, not charged to the grant)* | Phase 1 |
-| 1.1.0 | `!=`, `<>`, `!contains`, `def`; collation-aware substring matching, and any `==` change the collation decision forces | Phases 2, 3 |
-| 1.1.x | The Phase 5 findings, as they are fixed | Phase 5 |
-| 1.1.x | Usage guide, API reference and a repaired README, in-repository | Phase 4 (funded part) |
+| patch | Conjunctive property filters, together with the `comma_list` consolidation *(baseline, not charged to the grant)* | Phase 1 |
+| minor | `!=`, `<>`, `!contains`, `def` | Phase 2 |
+| minor | `accent_sensitive`; collation-aware substring matching (the decision left `==` unchanged) | Phase 3 |
+| patch | The Phase 5 findings, as they are fixed | Phase 5 |
+| patch | Usage guide, API reference and a repaired README, in-repository | Phase 4 (funded part) |
 | *unscheduled* | A published documentation site, and executable examples | Phase 4's unfunded 12 hours |
 
-1.0.7 is deliberately its own patch release, ahead of the feature work.  `caldav`
+The Phase 1 fix is deliberately its own patch release, ahead of the feature work.  `caldav`
 pins `>=1.0.5,<2`, so it reaches users on their next `pip install -U` without any
 action on `caldav`'s part, and there is no reason to make a correctness fix wait for
 a feature.
 
-1.1.0 is a minor bump because it adds operators.  It should be coordinated with
+The Phase 2 release is a minor bump because it adds operators.  It should be coordinated with
 `caldav`'s #568 work so that the CalDAV XML side and the client-side fallback land
 in the same `caldav` release as the operator they depend on.
 
 Phase 5 has no release of its own because its output is findings rather than a
-feature.  Whether it produces a 1.1.1 or nothing at all is not knowable in advance,
+feature.  Whether it produces a patch release or nothing at all is not knowable in advance,
 and a roadmap that promised otherwise would be promising that the bugs exist.
 
 The last row is the honest one: two documentation items have no scheduled release

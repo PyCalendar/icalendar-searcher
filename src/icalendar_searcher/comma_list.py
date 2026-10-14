@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from icalendar import Component
 from icalendar.prop import vCategory, vText
 
-from .collation import Collation, get_collation_function
+from .collation import Collation, get_collation_function, get_equality_function
 from .utils import NEGATED_OPERATORS, types_factory
 
 
@@ -136,10 +136,6 @@ def _normalize_plural_filter(filter_value: object) -> str | set[str]:
     return filter_value  # type: ignore[return-value]
 
 
-def _eq(a: str, b: str, case_sensitive: bool) -> bool:
-    return a == b if case_sensitive else a.lower() == b.lower()
-
-
 def matches(
     key: str,
     operator: str,
@@ -149,6 +145,7 @@ def matches(
     collation: Collation,
     case_sensitive: bool,
     locale: str | None,
+    accent_sensitive: bool = True,
 ) -> bool:
     """Whether ``component`` matches a comma-list property filter.
 
@@ -176,32 +173,37 @@ def matches(
             collation=collation,
             case_sensitive=case_sensitive,
             locale=locale,
+            accent_sensitive=accent_sensitive,
         )
+
+    _eq = get_equality_function(collation, case_sensitive, locale, accent_sensitive)
 
     if not plural:
         ## singular: substring (contains) / exact-to-one-token (==)
         filter_str = str(filter_value)
         if operator == "contains":
-            collation_fn = get_collation_function(collation, case_sensitive, locale)
+            collation_fn = get_collation_function(
+                collation, case_sensitive, locale, accent_sensitive
+            )
             return any(collation_fn(filter_str, token) for token in comp_values)
         if operator == "==":
-            return any(_eq(filter_str, token, case_sensitive) for token in comp_values)
+            return any(_eq(filter_str, token) for token in comp_values)
         raise NotImplementedError(f"The operator {operator} is not supported yet.")
 
     ## plural: exact matching against the set of tokens
     normalized = _normalize_plural_filter(filter_value)
     if operator == "contains":
         if isinstance(normalized, str):
-            return any(_eq(normalized, cv, case_sensitive) for cv in comp_values)
+            return any(_eq(normalized, cv) for cv in comp_values)
         ## subset check: every requested token must be present
-        return all(any(_eq(fv, cv, case_sensitive) for cv in comp_values) for fv in normalized)
+        return all(any(_eq(fv, cv) for cv in comp_values) for fv in normalized)
     if operator == "==":
         if isinstance(normalized, str):
             if len(comp_values) != 1:
                 return False
-            return _eq(normalized, next(iter(comp_values)), case_sensitive)
+            return _eq(normalized, next(iter(comp_values)))
         ## exact set equality (order irrelevant)
         if len(normalized) != len(comp_values):
             return False
-        return all(any(_eq(fv, cv, case_sensitive) for cv in comp_values) for fv in normalized)
+        return all(any(_eq(fv, cv) for cv in comp_values) for fv in normalized)
     raise NotImplementedError(f"The operator {operator} is not supported yet.")
