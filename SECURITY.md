@@ -9,4 +9,3 @@ This package offers open-ended expansion of recurring events and tasks, potentia
 Even when closed date ranges are utilized, there is no guarantee that the number of recurrences will be manageable.
 
 Some workarounds reducing the risks will probably be considered in a future release.
-

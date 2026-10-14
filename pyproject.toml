@@ -1,5 +1,10 @@
 [build-system]
-requires = ["hatchling>=1.27.0", "hatch-vcs"]
+requires = [
+    "hatchling>=1.27.0",
+    "hatch-vcs",
+    # raw-options.scm (the describe_command below) needs setuptools-scm 9
+    "setuptools-scm>=9",
+]
 build-backend = "hatchling.build"
 
 [project]
@@ -35,6 +40,10 @@ Issues = "https://github.com/pycalendar/icalendar-searcher/issues"
 
 [tool.hatch.version]
 source = "vcs"
+# Only v<digit>* tags are releases. The default describe matches any tag
+# containing a digit, so a date-stamped local tag on HEAD (a pre-rewrite
+# backup, say) became the version and broke every build.
+raw-options = { scm = { git = { describe_command = "git describe --dirty --tags --long --abbrev=40 --match v[0-9]*" } } }
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/icalendar_searcher/_version.py"
