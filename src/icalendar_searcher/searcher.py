@@ -42,6 +42,11 @@ def _as_kind_of(value: date | datetime, limit: datetime) -> date | datetime:
     return limit.date()
 
 
+def _recurs(component: Component) -> bool:
+    """Whether the component defines a recurrence set: RFC 5545 builds one from RRULE and RDATE."""
+    return "RRULE" in component or "RDATE" in component
+
+
 def _near_edge(value: date | datetime) -> bool:
     return value < _as_kind_of(value, _shift(DT_MIN, _EDGE_ZONE)) or value > _as_kind_of(
         value, _shift(DT_MAX, -_EDGE_ZONE)
@@ -473,7 +478,7 @@ class Searcher(FilterMixin):
         skip_undef_for_expanded = False
 
         first = orig_recurrence_set[0]
-        if not expand_only and "RRULE" in first and not _ignore_rrule_and_time:
+        if not expand_only and _recurs(first) and not _ignore_rrule_and_time:
             ## TODO: implement logic above
             base_element_match = self.check_component(first, _ignore_rrule_and_time=True)
             if not base_element_match:
@@ -516,7 +521,7 @@ class Searcher(FilterMixin):
         ## if expand_only, expand all comptypes, otherwise only the comptypes specified in the filters
         comptypes_for_expansion = ["VTODO", "VEVENT", "VJOURNAL"] if expand_only else comptypesu
 
-        if not _ignore_rrule_and_time and "RRULE" in first:
+        if not _ignore_rrule_and_time and _recurs(first):
             recurrence_set = self._expand_recurrences(recurrence_set, comptypes_for_expansion)
 
         if not expand_only:
@@ -927,7 +932,7 @@ class Searcher(FilterMixin):
         2.1) All components in the recurrence set should have the same UID
 
         2.2) Exactly one element ("master") of the recurrence set may
-        have the RRULE property set.  RFC 5545 does not mandate any
+        have the RRULE or RDATE property set.  RFC 5545 does not mandate any
         particular ordering inside a VCALENDAR, so the master may
         appear in any position; this method will move it to the head
         of the returned list so downstream expansion code can rely on
@@ -954,7 +959,7 @@ class Searcher(FilterMixin):
         if not len(components):
             raise ValueError("Empty component?")
 
-        ## A recurrence set should be exactly one "master" (with RRULE) plus zero
+        ## A recurrence set should be exactly one "master" (with RRULE or RDATE) plus zero
         ## or more "exception recurrences" (with RECURRENCE-ID and without RRULE),
         ## OR zero masters plus one-or-more standalone occurrences (all with
         ## RECURRENCE-ID).  RFC 5545 does not mandate an ordering inside the
@@ -962,7 +967,7 @@ class Searcher(FilterMixin):
         ## the head.  Some servers (notably calendar.mail.ru) emit overrides
         ## before the master.
         if len(components) > 1:
-            masters = [c for c in components if "rrule" in c and "recurrence-id" not in c]
+            masters = [c for c in components if _recurs(c) and "recurrence-id" not in c]
             non_masters = [c for c in components if c not in masters]
             if len(masters) > 1 or any("rrule" in c for c in non_masters):
                 raise ValueError(
