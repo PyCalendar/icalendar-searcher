@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This release contains mostly "nits" found while exercising corner cases in the caldav, plann and calendaring packages: handling of events with extreme dates, events with RDATE but without RRULE, and a `py.typed` marker for type checkers.  Searches without `start` or `end` now also find recurrences before 1970 and after 2038; a new `max_occurrences` parameter limits how many occurrences such a search expands.
+
+### Added
+
+- **`py.typed` marker** (PEP 561), so type checkers such as mypy use the package's type annotations instead of skipping it as untyped.  Self-requested in https://github.com/pycalendar/icalendar-searcher/issues/24
+
 ### Fixed
 
 - **Searches without `start` or `end` only saw recurrences between 1970 and 2038**: an alarm search, or a search with only `start` or only `end`, missed occurrences outside that window, and a search starting after 2037 matched no occurrence at all.  Without `end`, a recurrence set is now expanded into at least `max_occurrences` occurrences, if it has that many, but not many more: from `start`, or without `start`, around the present time.  `max_occurrences` is a new `Searcher` parameter, defaulting to 1825 - five years of a daily event; `None` lifts the limit.  This also means a search without `start` or `end` no longer expands an event that recurs forever back to 1970 and up to 2038.  An alarm search without `end` is expanded up to the end of the alarm range instead.  A recurring component whose occurrences last longer than the whole `datetime` range is matched as it is instead of raising `OverflowError`.  Reported in https://github.com/pycalendar/icalendar-searcher/issues/23

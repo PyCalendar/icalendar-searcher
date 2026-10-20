@@ -19,6 +19,7 @@ requires-python = ">=3.10,<4.0"
 license = "GPL-3.0-or-later OR Apache-2.0"
 license-files = ["COPYING.GPL", "COPYING.APACHE"]
 authors = [{ name = "Tobias Brox", email = "tobias@redpill-linpro.com" }]
+classifiers = ["Typing :: Typed"]
 dependencies = [
     "icalendar>=6.2.0",
     "recurring-ical-events>=3.8.0",
