@@ -781,10 +781,10 @@ should look like.
 the collection one component at a time, and that a server-side user with static data
 and many queries would want indexes instead.  Nobody is that user yet.
 
-**Sorting an unbounded expansion (6 h, or 1 h for a guard rail).**  `expand` with an open-ended range yields a
-generator, which is fine until something sorts it.  The docstring warns; the code
-does not defend.  A streaming or windowed sort would fix it properly; a documented
-guard rail would fix it cheaply.
+**Sorting a huge expansion (6 h).**  `expand` without `end` is capped at
+`max_occurrences` occurrences per recurrence set, but a wide range given explicitly
+may still yield millions, and sorting materialises them all.  A streaming or
+windowed sort would fix it.
 
 **`FREEBUSY` support (4 h).**  Raised as an open question in the class docstring and never
 answered.
