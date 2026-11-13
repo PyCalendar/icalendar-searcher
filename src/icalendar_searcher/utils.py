@@ -21,7 +21,7 @@ NEGATED_OPERATORS = {"!=": "==", "!contains": "contains"}
 ## Operators that take no value, only checking whether the property is set
 PRESENCE_OPERATORS = ("def", "undef")
 
-SUPPORTED_OPERATORS = ("contains", "==", *NEGATED_OPERATORS, *PRESENCE_OPERATORS)
+SUPPORTED_OPERATORS = ("contains", "==", "in", *NEGATED_OPERATORS, *PRESENCE_OPERATORS)
 
 
 ## Helper to normalize date/datetime for comparison

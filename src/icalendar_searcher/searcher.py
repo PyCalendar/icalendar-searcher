@@ -303,6 +303,14 @@ class Searcher(FilterMixin):
           the property to be defined, so a component without the
           property does not match.  Use undef to find those.
 
+        * in - the value is a collection (a list, set, range ...), and
+          the property has to equal (as with ==) one of its members, e.g.
+          `add_property_filter("PRIORITY", range(1, 4), operator="in")`.
+          An empty collection matches nothing.  Like ==, it requires the
+          property to be defined.  Not supported for "category" and
+          "categories".  CalDAV has no such filter, so a CalDAV client
+          has to apply it client-side.
+
         * def, undef - will match if the property is (not) defined.
           The value is ignored and may be set to None.
 
@@ -334,7 +342,15 @@ class Searcher(FilterMixin):
         if operator not in PRESENCE_OPERATORS:
             if value is None:
                 raise ValueError(f"The operator {operator} needs a value, got None")
-            if comma_list.is_comma_list_key(key):
+            if operator == "in":
+                if comma_list.is_comma_list_key(key):
+                    raise NotImplementedError(f"The operator in is not supported for {key}")
+                if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+                    raise TypeError(f"The operator in needs a collection of values, got {value!r}")
+                self._property_filters[key] = tuple(
+                    types_factory.for_property(key)(x) for x in value
+                )
+            elif comma_list.is_comma_list_key(key):
                 self._property_filters[key] = comma_list.store_filter_value(key, value)
             else:
                 self._property_filters[key] = types_factory.for_property(key)(value)

@@ -285,16 +285,22 @@ class FilterMixin:
             )
             if not collation_fn(filter_str, comp_str):
                 return False
-        elif operator == "==":
-            ## Property should exactly match the filter value
+        elif operator in ("==", "in"):
+            ## Property should exactly match the filter value, or for
+            ## "in", one of the filter values
             if comp_key not in component:
                 return False
 
             ## A property occurring more than once (COMMENT, ATTENDEE)
             ## comes back as a list; it matches if any instance does.
             instances = comp_value if isinstance(comp_value, list) else [comp_value]
+            wanted = filter_value if operator == "in" else (filter_value,)
             text_equal = get_equality_function(collation, case_sensitive, locale, accent_sensitive)
-            return any(self._values_equal(value, filter_value, text_equal) for value in instances)
+            return any(
+                self._values_equal(value, want, text_equal)
+                for value in instances
+                for want in wanted
+            )
         else:
             ## This shouldn't happen as add_property_filter validates operators
             raise NotImplementedError(f"Operator {operator} not implemented")
