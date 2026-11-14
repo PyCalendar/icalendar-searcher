@@ -503,7 +503,7 @@ at it.
 
 **Tasks:**
 - [ ] 5.1 `filter`, `filter_calendar` and `sort_calendar` reviewed against the RFCs by a human; findings filed, cheap ones fixed
-- [ ] 5.2 RFC 4791 §9.9 branches of `filters.py` covered, the VTODO matrix tested against the RFC text
+- [x] 5.2 RFC 4791 §9.9 branches of `filters.py` covered, the VTODO matrix tested against the RFC text
 - [ ] 5.3 Property-type comparison analysed and filed against `icalendar`
 
 5.1 is deliberately not "write more tests".  Tests written by reading the

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`in` operator** for `add_property_filter()`: the value is a collection, and a property equal to any of its members matches, like `add_property_filter("PRIORITY", range(1, 4), operator="in")` for the tasks with priority 1-3.  CalDAV has no such filter, so a CalDAV client has to apply it client-side.  Not supported for `category`/`categories`.  Requested for the `select --priority` option of [plann](https://github.com/pycalendar/plann).
 
+### Fixed
+
+- **VTODO time-range boundaries**: the VTODO table of RFC 4791 section 9.9 uses inclusive bounds that differ from row to row, and the implementation reduced all rows to the VEVENT form.  A task with only `DUE`, only `COMPLETED`, or both `CREATED` and `COMPLETED`, or with `DTSTART` and `DURATION`, was wrongly included or excluded when the search range started or ended exactly on one of its timestamps.  The rows are now evaluated as written in the RFC.
+
 ## [1.3.0] - 2026-10-21
 
 This release contains mostly "nits" found while exercising corner cases in the caldav, plann and calendaring packages: handling of events with extreme dates, events with RDATE but without RRULE, and a `py.typed` marker for type checkers.  Searches without `start` or `end` now also find recurrences before 1970 and after 2038; a new `max_occurrences` parameter limits how many occurrences such a search expands.

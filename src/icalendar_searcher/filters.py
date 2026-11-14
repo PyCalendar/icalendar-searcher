@@ -6,7 +6,6 @@ from typing import Any
 
 from icalendar import Component, error
 from icalendar.prop import vText
-from recurring_ical_events import DATE_MAX_DT, DATE_MIN_DT
 
 from . import comma_list
 from .collation import Collation, get_collation_function, get_equality_function
@@ -21,6 +20,43 @@ def _component_end(component: Component) -> date | datetime:
     except OverflowError:
         duration = component.get("DURATION")
         return DT_MIN if duration is not None and duration.dt < timedelta(0) else DT_MAX
+
+
+def _vtodo_overlaps(
+    component: Component,
+    dtstart: datetime | None,
+    due: datetime | None,
+    start: datetime,
+    end: datetime,
+    tz: tzinfo | None,
+) -> bool:
+    """The VTODO table of RFC4791 section 9.9, row by row.
+
+    :param dtstart: normalised DTSTART, or None
+    :param due: normalised DUE, or DTSTART+DURATION, or None
+    :param start: lower bound of the search range (``DT_MIN`` if open)
+    :param end: upper bound of the search range (``DT_MAX`` if open)
+    """
+    if "DUE" not in component and "DURATION" not in component:
+        ## icalendar reports an end (== DTSTART) even when there is none.
+        due = None
+    if dtstart and due:
+        if "DURATION" in component:
+            return start <= due and (end > dtstart or end >= due)
+        return (start < due or start <= dtstart) and (end > dtstart or end >= due)
+    if dtstart:
+        return start <= dtstart and end > dtstart
+    if due:
+        return start < due and end >= due
+    created = _normalize_dt(component["CREATED"].dt, tz) if "CREATED" in component else None
+    completed = _normalize_dt(component["COMPLETED"].dt, tz) if "COMPLETED" in component else None
+    if created and completed:
+        return (start <= created or start <= completed) and (end >= created or end >= completed)
+    if completed:
+        return start <= completed and end >= completed
+    if created:
+        return end > created
+    return True
 
 
 class FilterMixin:
@@ -89,50 +125,17 @@ class FilterMixin:
         ## date DTSTART (RFC 5545 section 3.6.1), so comp_end is always set.
 
         if comp_name == "VTODO":
-            ## There is a long matrix for VTODO in the RFC4701,
-            ## section 9.9, and it may seem complicated, but it isn't
-            ## that bad:
-
-            ## * A task with DTSTART and DURATION is equivalent with a
-            ##   task with DTSTART and DUE.  This complexity is
-            ##   already handled by the icalendar library, so all rows
-            ##   in the matrix where "VTODO has the DURATION property?"
-            ##   is "Y" may be removed.
-            ##
-            ## * The matrix says that if NEITHER DTSTART, DUE nor DURATION
-            ##   is given, then CREATED and COMPLETED serve as the time bounds.
-            ##   When both are present, treat them as a [CREATED, COMPLETED] range.
-            ##   When only COMPLETED is present, treat it as a point event.
-            ##   When only CREATED is present, the RFC condition is just (end > CREATED)
-            ##   — the task is open-ended from CREATED onward, so comp_end = DATE_MAX_DT.
-            if not comp_start and not comp_end:
-                if "CREATED" in component:
-                    comp_start = _normalize_dt(component["CREATED"].dt, _tz)
-                if "COMPLETED" in component:
-                    comp_end = _normalize_dt(component["COMPLETED"].dt, _tz)
-                if comp_start and not comp_end:
-                    comp_end = _normalize_dt(DATE_MAX_DT)
-
-            ## * If only COMPLETED is given (no DTSTART/DUE/CREATED), treat as a point event
-            if comp_end and not comp_start:
-                comp_start = comp_end
-            ## * If only DTSTART is given (no DUE/DURATION), treat as a zero-duration event
-            if comp_start and not comp_end:
-                comp_end = comp_start
-
-            ## * A task may have the end before the start.  The
-            ##   complicated OR-logic in the matrix may be eliminated
-            ##   by swapping start/end if necessary:
-            if comp_end and comp_start and comp_end < comp_start:
-                tmp = comp_start
-                comp_start = comp_end
-                comp_end = tmp
-
-            ## * A task with no timestamps is considered to be done "at any or all days",
-            ##   and should always be found when doing a date search:
-            if not comp_end and not comp_start:
-                comp_start = _normalize_dt(DATE_MIN_DT)
-                comp_end = _normalize_dt(DATE_MAX_DT)
+            ## RFC4791 section 9.9 has a table for VTODO with *inclusive*
+            ## bounds that differ from row to row, so the rows are evaluated
+            ## literally rather than reduced to the VEVENT form.
+            return _vtodo_overlaps(
+                component,
+                comp_start,
+                comp_end,
+                _normalize_dt(start or DT_MIN, _tz),
+                _normalize_dt(end or DT_MAX, _tz),
+                _tz,
+            )
 
         elif comp_name == "VJOURNAL":
             if not comp_start:
