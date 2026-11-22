@@ -8,7 +8,8 @@ Tests that the sort() method correctly sorts different types of inputs:
 
 from datetime import datetime
 
-from icalendar import Calendar, Event, Todo
+import pytest
+from icalendar import Calendar, Event, FreeBusy, Todo
 
 from icalendar_searcher import Searcher
 
@@ -379,6 +380,37 @@ def test_sort_calendar_mixed_component_types() -> None:
     assert non_tz[0]["DTSTART"].dt == datetime(2025, 1, 1)  # Todo
     assert non_tz[1]["DTSTART"].dt == datetime(2025, 1, 2)  # Event
     assert non_tz[2]["DTSTART"].dt == datetime(2025, 1, 3)  # Event
+
+
+@pytest.mark.parametrize("key", ["SUMMARY", "DTSTART", "STATUS", "UID"])
+def test_sort_calendar_other_component_types(key: str) -> None:
+    """VFREEBUSY and X- components are sorted like any other component."""
+    cal = Calendar.from_ical(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//Test//EN\r\n"
+        "BEGIN:VFREEBUSY\r\nUID:3\r\nSUMMARY:c\r\nSTATUS:c\r\n"
+        "DTSTART:20250103T100000\r\nDTEND:20250103T110000\r\nEND:VFREEBUSY\r\n"
+        "BEGIN:X-FOO\r\nUID:1\r\nSUMMARY:a\r\nSTATUS:a\r\n"
+        "DTSTART:20250101T100000\r\nEND:X-FOO\r\n"
+        "BEGIN:VEVENT\r\nUID:2\r\nSUMMARY:b\r\nSTATUS:b\r\n"
+        "DTSTART:20250102T100000\r\nEND:VEVENT\r\n"
+        "END:VCALENDAR\r\n"
+    )
+    searcher = Searcher()
+    searcher.add_sort_key(key)
+    sorted_cal = searcher.sort_calendar(cal)
+    assert [str(c["UID"]) for c in sorted_cal.subcomponents] == ["1", "2", "3"]
+
+
+def test_sort_vfreebusy_without_the_sort_key() -> None:
+    """A VFREEBUSY without DTSTART gets the default instead of a KeyError."""
+    busy = FreeBusy()
+    busy.add("uid", "2")
+    event = Event()
+    event.add("uid", "1")
+    event.add("dtstart", datetime(2025, 1, 1))
+    searcher = Searcher()
+    searcher.add_sort_key("DTSTART")
+    assert [str(c["UID"]) for c in searcher.sort([event, busy])] == ["2", "1"]
 
 
 def test_sort_calendar_no_sort_keys() -> None:

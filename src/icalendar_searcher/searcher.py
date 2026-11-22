@@ -881,7 +881,7 @@ class Searcher(FilterMixin):
                 "VTODO": "NEEDS-ACTION",
                 "VJOURNAL": "FINAL",
                 "VEVENT": "TENTATIVE",
-            }[comp.name],
+            }.get(comp.name, ""),
             "category": "",
             ## Usage of strftime is a simple way to ensure there won't be
             ## problems if comparing dates with timestamps
