@@ -61,6 +61,8 @@ searcher.add_sort_key("DTSTART")
 sorted_calendars = searcher.sort(calendars)
 ```
 
+A component without the sort property sorts as a default value: a missing `DTSTART` (or other date-time) first, a missing `DUE` last, missing text as the empty string (first), a missing number or `DURATION` as 0, and a missing `STATUS` as the default status of its component type (`TENTATIVE`, `NEEDS-ACTION` or `FINAL`; the empty string for other component types, such as `VFREEBUSY`).  `reversed=True` reverses all of that.
+
 ### Case-Sensitive vs Case-Insensitive Filtering
 
 By default, text filtering is **case-sensitive**. You can make it case-insensitive:

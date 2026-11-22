@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Sorting a calendar holding `VFREEBUSY` or `X-` components** raised `KeyError`, whatever the sort key.
 
+- **Sorting components that lack the sort property** raised `TypeError` for text properties such as `SUMMARY`, for numbers such as `SEQUENCE`, and for any reversed sort key.  A missing property now sorts as a default value, documented in the README: a missing `DTSTART` first and a missing `DUE` last - also relative to dates before 1970 and after 2050, which used to sort on the wrong side of them.  A reversed text sort also put `ab` before `abc`; it now gives `abc`, `ab`.
+
 ## [1.3.0] - 2026-10-21
 
 This release contains mostly "nits" found while exercising corner cases in the caldav, plann and calendaring packages: handling of events with extreme dates, events with RDATE but without RRULE, and a `py.typed` marker for type checkers.  Searches without `start` or `end` now also find recurrences before 1970 and after 2038; a new `max_occurrences` parameter limits how many occurrences such a search expands.

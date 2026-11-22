@@ -11,6 +11,7 @@ from icalendar import Calendar, Event, Todo
 
 import icalendar_searcher.searcher
 from icalendar_searcher import Searcher
+from icalendar_searcher.searcher import _Reversed
 
 
 ## TODO: This is a fragile test - there is no requirement that the
@@ -28,7 +29,7 @@ from icalendar_searcher import Searcher
 ## 2) the icalendar.Event object directly, without being part of an
 ## icalendar (this probably breaks now, but it should be acceptable)
 def test_sorting_value_mixed_types_and_reverse() -> None:
-    """Check dtstart -> strftime, priority numeric, reversed summary -> bytes-inverted,
+    """Check dtstart -> formatted string, priority numeric, reversed summary -> wrapped,
     and categories -> joined string."""
     cal = Calendar()
     ev = Event()
@@ -48,7 +49,8 @@ def test_sorting_value_mixed_types_and_reverse() -> None:
 
     assert vals[0] == "2025-01-02090000"
     assert vals[1] == 5
-    assert vals[2] == bytes(b ^ 0xFF for b in b"abc")
+    assert vals[2] == _Reversed(b"abc")
+    assert vals[2] < _Reversed(b"ab")
     assert vals[3] == "x,y"
 
 
@@ -68,7 +70,7 @@ def test_sorting_value_status_default_for_component_types() -> None:
         s.add_sort_key("status", reversed=False)
 
         vals = s.sorting_value(cal)
-        assert vals == [expected]
+        assert vals == [expected.encode()]
 
 
 def test_special_sort_keys_isnt_overdue_and_hasnt_started(monkeypatch: Callable) -> None:

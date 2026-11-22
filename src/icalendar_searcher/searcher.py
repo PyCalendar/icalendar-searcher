@@ -6,6 +6,7 @@ import logging
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone, tzinfo
+from functools import total_ordering
 from typing import TYPE_CHECKING, Any
 
 import recurring_ical_events
@@ -32,6 +33,52 @@ from .utils import (
 _EDGE_ZONE = timedelta(days=2 * 366)
 ## The margin when a component is too odd to compute one from
 _FALLBACK_MARGIN = timedelta(days=366)
+
+
+@total_ordering
+class _Reversed:
+    """A sort value that sorts in the opposite order of the value it wraps."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Reversed) and self.value == other.value
+
+    def __lt__(self, other: _Reversed) -> bool:
+        return other.value < self.value
+
+    def __hash__(self) -> int:
+        return hash(self.value)
+
+
+def _sortable_time(value: date | datetime) -> str:
+    """The wall-clock time of ``value`` as a string that sorts chronologically,
+    with a four-digit year on every platform, unlike ``strftime("%Y")``."""
+    hour, minute, second = (getattr(value, attr, 0) for attr in ("hour", "minute", "second"))
+    return f"{value.year:04d}-{value.month:02d}-{value.day:02d}{hour:02d}{minute:02d}{second:02d}"
+
+
+def _default_sort_value(key: str, comp: Component) -> Any:
+    """What a component without the property ``key`` sorts as."""
+    if key == "due":
+        return DT_MAX
+    if key == "duration":
+        ## types_factory says vDDDTypes, but its value is a timedelta
+        return timedelta(0)
+    if key == "status":
+        return {"VTODO": "NEEDS-ACTION", "VJOURNAL": "FINAL", "VEVENT": "TENTATIVE"}.get(
+            comp.name, ""
+        )
+    if key in types_factory.types_map:
+        prop_type = types_factory.for_property(key)
+        if prop_type.__name__ in ("vDDDTypes", "vDatetime", "vDate"):
+            return DT_MIN
+        if issubclass(prop_type, int):
+            return 0
+    return ""
 
 
 def _as_kind_of(value: date | datetime, limit: datetime) -> date | datetime:
@@ -872,36 +919,31 @@ class Searcher(FilterMixin):
         else:
             comp = component
 
-        defaults = {
-            ## TODO: all possible non-string sort attributes needs to be listed here, otherwise we will get type errors when comparing objects with the property defined vs undefined (or maybe we should make an "undefined" object that always will compare below any other type?  Perhaps there exists such an object already?)
-            "due": "2050-01-01",
-            "dtstart": "1970-01-01",
-            "priority": 0,
-            "status": {
-                "VTODO": "NEEDS-ACTION",
-                "VJOURNAL": "FINAL",
-                "VEVENT": "TENTATIVE",
-            }.get(comp.name, ""),
-            "category": "",
-            ## Usage of strftime is a simple way to ensure there won't be
-            ## problems if comparing dates with timestamps
-            "isnt_overdue": not (
-                "due" in comp
-                and comp["due"].dt.strftime("%F%H%M%S") < datetime.now().strftime("%F%H%M%S")
+        ## Usage of strftime is a simple way to ensure there won't be
+        ## problems if comparing dates with timestamps
+        computed = {
+            "isnt_overdue": lambda: (
+                not (
+                    "due" in comp
+                    and comp["due"].dt.strftime("%F%H%M%S") < datetime.now().strftime("%F%H%M%S")
+                )
             ),
-            "hasnt_started": (
+            "hasnt_started": lambda: (
                 "dtstart" in comp
                 and comp["dtstart"].dt.strftime("%F%H%M%S") > datetime.now().strftime("%F%H%M%S")
             ),
         }
         for sort_key, reverse in self._sort_keys:
-            if comma_list.is_plural_sort_key(sort_key):
+            if sort_key in computed:
+                val = computed[sort_key]()
+            elif comma_list.is_plural_sort_key(sort_key):
                 val = comma_list.sort_value(sort_key, comp)
             else:
                 val = comp.get(sort_key, None)
+            ## A missing property goes through the same steps as a value
+            ## would, so it is collated, formatted and reversed alike.
             if val is None:
-                ret.append(defaults.get(sort_key, ""))
-                continue
+                val = _default_sort_value(sort_key, comp)
 
             # Track if this is a text property (for collation)
             # Apply collation BEFORE datetime/category conversion
@@ -909,8 +951,8 @@ class Searcher(FilterMixin):
 
             if hasattr(val, "dt"):
                 val = val.dt
-            if hasattr(val, "strftime"):
-                val = val.strftime("%F%H%M%S")
+            if isinstance(val, date):
+                val = _sortable_time(val)
 
             ## TODO: I don't have time to fix test code for this at
             ## the moment (but the bug in v1.0.0 was caught by cyrus
@@ -944,12 +986,7 @@ class Searcher(FilterMixin):
                 val = sort_key_fn(val)
 
             if reverse:
-                if isinstance(val, (str, bytes)):
-                    if isinstance(val, str):
-                        val = val.encode()
-                    val = bytes(b ^ 0xFF for b in val)
-                else:
-                    val = -val
+                val = _Reversed(val)
             ret.append(val)
 
         return ret
