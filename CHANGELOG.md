@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Contains** could trigger some false positives for properties occurring multiple times (like COMMENT and ATTENDEE - the filter text would be matched towards `repr()`, which included the `vText` class name).
+
 - **VTODO time-range boundaries**: the VTODO table of RFC 4791 section 9.9 uses inclusive bounds that differ from row to row, and the implementation reduced all rows to the VEVENT form.  A task with only `DUE`, only `COMPLETED`, or both `CREATED` and `COMPLETED`, or with `DTSTART` and `DURATION`, was wrongly included or excluded when the search range started or ended exactly on one of its timestamps.  The rows are now evaluated as written in the RFC.
 
 - **VFREEBUSY time-range searches**: a time-range search over a `VFREEBUSY` component raised `TypeError` unless the component had both `DTSTART` and `DTEND`, and with both it was evaluated as if it were a `VEVENT`, so a search starting exactly at `DTEND` missed it.  The VFREEBUSY table of RFC 4791 section 9.9 is now followed: `DTSTART` and `DTEND` when both are present (`DTEND` inclusive), otherwise each `FREEBUSY` period, otherwise no match.  `DURATION` is ignored, as the RFC requires.

@@ -205,3 +205,75 @@ def test_not_contains_case_insensitive() -> None:
 def test_unimplemented_operators_raise(operator: str) -> None:
     with pytest.raises(NotImplementedError):
         Searcher().add_property_filter("SUMMARY", "x", operator=operator)
+
+
+def _multi_event() -> Event:
+    """An event with two COMMENT and two ATTENDEE instances."""
+    event = _event()
+    event.add("comment", "alpha")
+    event.add("comment", "beta")
+    event.add("attendee", "mailto:a@example.com")
+    event.add("attendee", "mailto:b@example.com")
+    return event
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ## Fragments of the Python repr of the list of instances
+        ("COMMENT", "vText"),
+        ("COMMENT", "[vText(b'alpha')"),
+        ("ATTENDEE", "vCalAddress"),
+        ("ATTENDEE", "('mailto"),
+        ## A substring spanning two instances
+        ("COMMENT", "alpha'), vText(b'beta"),
+        ("ATTENDEE", "com'), vCalAddress('mailto:b"),
+    ],
+)
+def test_contains_multi_instance_matches_values_only(key: str, value: str) -> None:
+    """contains on a property occurring more than once is a substring test
+    on each instance's value (RFC 4791 section 9.7.5), never on the Python
+    repr of the list of instances."""
+    event = _multi_event()
+    assert not _matches(event, key, value, "contains")
+    assert not _matches(event, key, value, "contains", case_sensitive=False)
+    assert _matches(event, key, value, "!contains")
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("COMMENT", "lph"),
+        ("COMMENT", "eta"),
+        ("ATTENDEE", "a@example"),
+        ("ATTENDEE", "mailto:b@"),
+    ],
+)
+def test_contains_multi_instance_any_instance(key: str, value: str) -> None:
+    """contains matches if any instance's value contains the substring."""
+    event = _multi_event()
+    assert _matches(event, key, value, "contains")
+    assert _matches(event, key, value.upper(), "contains", case_sensitive=False)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ## One instance contains it, so !contains does not match
+        ("COMMENT", "lph", False),
+        ("COMMENT", "eta", False),
+        ("ATTENDEE", "a@example", False),
+        ("ATTENDEE", "mailto:b@", False),
+        ## No instance contains it
+        ("COMMENT", "gamma", True),
+        ("ATTENDEE", "c@example", True),
+    ],
+)
+def test_not_contains_multi_instance_no_instance(key: str, value: str, expected: bool) -> None:
+    """!contains on a property occurring more than once matches only if no
+    instance contains the substring, the same rule as != (no instance
+    equals).  RFC 4791 section 9.7.2 does not say how a negated text-match
+    treats several instances of one property."""
+    event = _multi_event()
+    assert _matches(event, key, value, "!contains") is expected
+    assert _matches(event, key, value.upper(), "!contains", case_sensitive=False) is expected

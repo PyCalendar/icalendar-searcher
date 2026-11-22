@@ -312,15 +312,17 @@ class FilterMixin:
                 return False
 
             ## Convert to string for substring matching
-            comp_str = str(comp_value)
             filter_str = str(filter_value)
 
             # Use collation function for text matching
             collation_fn = get_collation_function(
                 collation, case_sensitive, locale, accent_sensitive
             )
-            if not collation_fn(filter_str, comp_str):
-                return False
+            if not isinstance(comp_value, list):
+                comp_value = [comp_value]
+            return any(
+                collation_fn(filter_str, str(single_comp_value)) for single_comp_value in comp_value
+            )
         elif operator in ("==", "in"):
             ## Property should exactly match the filter value, or for
             ## "in", one of the filter values
