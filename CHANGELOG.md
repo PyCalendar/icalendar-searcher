@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **VTODO time-range boundaries**: the VTODO table of RFC 4791 section 9.9 uses inclusive bounds that differ from row to row, and the implementation reduced all rows to the VEVENT form.  A task with only `DUE`, only `COMPLETED`, or both `CREATED` and `COMPLETED`, or with `DTSTART` and `DURATION`, was wrongly included or excluded when the search range started or ended exactly on one of its timestamps.  The rows are now evaluated as written in the RFC.
 
+- **VFREEBUSY time-range searches**: a time-range search over a `VFREEBUSY` component raised `TypeError` unless the component had both `DTSTART` and `DTEND`, and with both it was evaluated as if it were a `VEVENT`, so a search starting exactly at `DTEND` missed it.  The VFREEBUSY table of RFC 4791 section 9.9 is now followed: `DTSTART` and `DTEND` when both are present (`DTEND` inclusive), otherwise each `FREEBUSY` period, otherwise no match.  `DURATION` is ignored, as the RFC requires.
+
+- **Sorting a calendar holding `VFREEBUSY` or `X-` components** raised `KeyError`, whatever the sort key.
+
+- **Sorting components that lack the sort property** raised `TypeError` for text properties such as `SUMMARY`, for numbers such as `SEQUENCE`, and for any reversed sort key.  A missing property now sorts as a default value, documented in the README: a missing `DTSTART` first and a missing `DUE` last - also relative to dates before 1970 and after 2050, which used to sort on the wrong side of them.  A reversed text sort also put `ab` before `abc`; it now gives `abc`, `ab`.
+
+- **Sorting by date-time ignored time zones**: values were compared by their wall-clock time, so 11:00 in Oslo sorted after 10:30 UTC.  They are now compared as instants, also for the `isnt_overdue` and `hasnt_started` sort keys.  Dates and floating times are read in the time zone of the Python process, as the time-range filters already do.
+
 ## [1.3.0] - 2026-10-21
 
 This release contains mostly "nits" found while exercising corner cases in the caldav, plann and calendaring packages: handling of events with extreme dates, events with RDATE but without RRULE, and a `py.typed` marker for type checkers.  Searches without `start` or `end` now also find recurrences before 1970 and after 2038; a new `max_occurrences` parameter limits how many occurrences such a search expands.

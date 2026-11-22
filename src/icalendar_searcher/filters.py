@@ -59,6 +59,30 @@ def _vtodo_overlaps(
     return True
 
 
+def _vfreebusy_overlaps(
+    component: Component, start: datetime, end: datetime, tz: tzinfo | None
+) -> bool:
+    """The VFREEBUSY table of RFC4791 section 9.9.
+
+    DURATION is ignored, as the RFC says, and the FREEBUSY periods are
+    only looked at when DTSTART or DTEND is missing.
+
+    :param start: lower bound of the search range (``DT_MIN`` if open)
+    :param end: upper bound of the search range (``DT_MAX`` if open)
+    """
+    if "DTSTART" in component and "DTEND" in component:
+        dtstart = _normalize_dt(component["DTSTART"].dt, tz)
+        dtend = _normalize_dt(component["DTEND"].dt, tz)
+        return start <= dtend and end > dtstart
+    periods = component.get("FREEBUSY", [])
+    if not isinstance(periods, list):
+        periods = [periods]
+    return any(
+        start < _normalize_dt(period.end, tz) and end > _normalize_dt(period.start, tz)
+        for period in periods
+    )
+
+
 class FilterMixin:
     """Mixin class providing filtering methods for calendar components.
 
@@ -83,7 +107,8 @@ class FilterMixin:
     ) -> bool:
         """Check if a component falls within the time range specified by self.start and self.end.
 
-        Implements RFC4791 section 9.9 time-range filtering logic for VEVENT, VTODO, and VJOURNAL.
+        Implements RFC4791 section 9.9 time-range filtering logic for VEVENT, VTODO,
+        VJOURNAL and VFREEBUSY.
 
         :param component: A single calendar component (VEVENT, VTODO, or VJOURNAL)
         :param _start: Effective start datetime (defaults to self.start).  Pass a pre-normalised
@@ -98,6 +123,14 @@ class FilterMixin:
         start = _start if _start is not None else self.start
         end = _end if _end is not None else self.end
         comp_name = component.name
+
+        if comp_name == "VFREEBUSY":
+            return _vfreebusy_overlaps(
+                component,
+                _normalize_dt(start or DT_MIN, _tz),
+                _normalize_dt(end or DT_MAX, _tz),
+                _tz,
+            )
 
         ## The logic below should correspond neatly with RFC4791 section 9.9
 

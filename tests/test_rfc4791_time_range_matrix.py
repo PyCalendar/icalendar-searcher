@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from icalendar import Event, Journal, Todo
+from icalendar import Calendar, Event, FreeBusy, Journal, Todo
 
 from icalendar_searcher import Searcher
 
@@ -170,6 +170,91 @@ def test_vjournal_without_dtstart_is_never_found(start: datetime, end: datetime)
     assert not _searcher("journal", start, end).check_component(_make(Journal))
 
 
+## ---- VFREEBUSY (table 4) -----------------------------------------------
+## There is no type flag for VFREEBUSY, so the searcher has none set.  Any
+## DURATION is ignored, and FREEBUSY is only looked at without DTSTART+DTEND.
+
+
+def _freebusy(*periods: tuple[datetime, datetime | timedelta], **props: Any) -> Any:
+    comp = _make(FreeBusy, **props)
+    for period in periods:
+        comp.add("freebusy", period)
+    return comp
+
+
+def _overlaps_period(start: datetime, end: datetime, pstart: datetime, pend: datetime) -> bool:
+    return start < pend and end > pstart
+
+
+FREEBUSY_CASES: dict[str, tuple[Callable[[], Any], Oracle]] = {
+    "dtstart+dtend": (
+        lambda: _freebusy(dtstart=T0, dtend=T0 + 2 * H),
+        lambda s, e: s <= T0 + 2 * H and e > T0,
+    ),
+    "dtstart+dtend, freebusy elsewhere": (
+        lambda: _freebusy((T0 + 3 * H, H), dtstart=T0, dtend=T0 + H),
+        lambda s, e: s <= T0 + H and e > T0,
+    ),
+    "dtstart+dtend, duration ignored": (
+        lambda: _freebusy(dtstart=T0, dtend=T0 + H, duration=3 * H),
+        lambda s, e: s <= T0 + H and e > T0,
+    ),
+    "freebusy period with end": (
+        lambda: _freebusy((T0, T0 + H)),
+        lambda s, e: _overlaps_period(s, e, T0, T0 + H),
+    ),
+    "freebusy period with duration": (
+        lambda: _freebusy((T0, 2 * H)),
+        lambda s, e: _overlaps_period(s, e, T0, T0 + 2 * H),
+    ),
+    "two freebusy periods": (
+        lambda: _freebusy((T0 - H, H), (T0 + 2 * H, T0 + 3 * H)),
+        lambda s, e: (
+            _overlaps_period(s, e, T0 - H, T0) or _overlaps_period(s, e, T0 + 2 * H, T0 + 3 * H)
+        ),
+    ),
+    "dtstart+freebusy, no dtend": (
+        lambda: _freebusy((T0 + H, H), dtstart=T0),
+        lambda s, e: _overlaps_period(s, e, T0 + H, T0 + 2 * H),
+    ),
+    "dtstart+duration only": (
+        lambda: _freebusy(dtstart=T0, duration=H),
+        lambda s, e: False,
+    ),
+    "nothing": (lambda: _freebusy(), lambda s, e: False),
+}
+
+
+@pytest.mark.parametrize("name", FREEBUSY_CASES)
+@pytest.mark.parametrize("start,end", RANGES)
+def test_vfreebusy_matrix(name: str, start: datetime, end: datetime) -> None:
+    make, oracle = FREEBUSY_CASES[name]
+    searcher = Searcher(start=start, end=end)
+    assert bool(searcher.check_component(make())) == oracle(start, end)
+
+
+def test_vfreebusy_with_several_periods_on_one_line() -> None:
+    """``FREEBUSY:p1,p2`` is one property with two periods (RFC 5545 3.8.2.6)."""
+    cal = Calendar.from_ical(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+        "BEGIN:VFREEBUSY\r\nUID:fb\r\nDTSTAMP:20250610T120000Z\r\n"
+        "FREEBUSY:20250610T100000Z/PT1H,20250610T140000Z/20250610T150000Z\r\n"
+        "END:VFREEBUSY\r\nEND:VCALENDAR\r\n"
+    )
+    assert Searcher(start=T0 + 2 * H, end=T0 + 3 * H).check_component(cal)
+    assert not Searcher(start=T0 - H, end=T0 + 2 * H).check_component(cal)
+
+
+def test_filter_calendar_with_only_vfreebusy() -> None:
+    cal = Calendar()
+    cal.add("prodid", "-//test//EN")
+    cal.add("version", "2.0")
+    cal.add_component(_freebusy((T0, H)))
+    cal.add_component(_freebusy((T0 + 3 * H, H)))
+    found = Searcher(start=T0 + 2 * H, end=T0 + 4 * H).filter_calendar(cal)
+    assert [c["freebusy"].dt[0] for c in found.subcomponents] == [T0 + 3 * H]
+
+
 ## ---- open-ended ranges -------------------------------------------------
 ## RFC 4791 section 9.9: "start" and "end" are both optional on the wire; an
 ## open bound must behave as minus/plus infinity in every table row.
@@ -236,3 +321,12 @@ def test_vtodo_open_ended_beyond_1970_2038(year: int) -> None:
     todo = _make(Todo, dtstart=when)
     assert Searcher(todo=True, start=when - H).check_component(todo)
     assert Searcher(todo=True, end=when + H).check_component(todo)
+
+
+@pytest.mark.parametrize("name", FREEBUSY_CASES)
+@pytest.mark.parametrize("offset", OFFSETS)
+def test_vfreebusy_open_ended(name: str, offset: int) -> None:
+    make, oracle = FREEBUSY_CASES[name]
+    point = T0 + offset * H
+    assert bool(Searcher(start=point).check_component(make())) == oracle(point, POS_INF)
+    assert bool(Searcher(end=point).check_component(make())) == oracle(NEG_INF, point)
