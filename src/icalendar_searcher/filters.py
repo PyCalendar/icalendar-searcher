@@ -224,7 +224,7 @@ class FilterMixin:
 
         ## For VTODOs, exclude if STATUS is COMPLETED or CANCELLED, or if COMPLETED property is set
         status = component.get("STATUS", "NEEDS-ACTION")
-        if status in ("COMPLETED", "CANCELLED"):
+        if isinstance(status, str) and status.upper() in ("COMPLETED", "CANCELLED"):
             return False
         if "COMPLETED" in component:
             return False
