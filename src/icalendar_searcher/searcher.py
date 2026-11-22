@@ -54,17 +54,15 @@ class _Reversed:
         return hash(self.value)
 
 
-def _sortable_time(value: date | datetime) -> str:
-    """The wall-clock time of ``value`` as a string that sorts chronologically,
-    with a four-digit year on every platform, unlike ``strftime("%Y")``."""
-    hour, minute, second = (getattr(value, attr, 0) for attr in ("hour", "minute", "second"))
-    return f"{value.year:04d}-{value.month:02d}-{value.day:02d}{hour:02d}{minute:02d}{second:02d}"
+## Sort values of a missing date-time: present ones are (1, datetime)
+_MISSING_FIRST = (0, DT_MIN)
+_MISSING_LAST = (2, DT_MAX)
 
 
 def _default_sort_value(key: str, comp: Component) -> Any:
     """What a component without the property ``key`` sorts as."""
     if key == "due":
-        return DT_MAX
+        return _MISSING_LAST
     if key == "duration":
         ## types_factory says vDDDTypes, but its value is a timedelta
         return timedelta(0)
@@ -75,7 +73,7 @@ def _default_sort_value(key: str, comp: Component) -> Any:
     if key in types_factory.types_map:
         prop_type = types_factory.for_property(key)
         if prop_type.__name__ in ("vDDDTypes", "vDatetime", "vDate"):
-            return DT_MIN
+            return _MISSING_FIRST
         if issubclass(prop_type, int):
             return 0
     return ""
@@ -428,7 +426,8 @@ class Searcher(FilterMixin):
 
         Special keys "isnt_overdue" and "hasnt_started" is
         supported, those will compare the DUE (for a task) or the
-        DTSTART with the current wall clock and return a bool.
+        DTSTART with the current time and return a bool.  Values in
+        different time zones are compared as instants.
 
         Except for that, the sort key should be an icalendar property.
 
@@ -919,19 +918,10 @@ class Searcher(FilterMixin):
         else:
             comp = component
 
-        ## Usage of strftime is a simple way to ensure there won't be
-        ## problems if comparing dates with timestamps
+        now = _normalize_dt(datetime.now())
         computed = {
-            "isnt_overdue": lambda: (
-                not (
-                    "due" in comp
-                    and comp["due"].dt.strftime("%F%H%M%S") < datetime.now().strftime("%F%H%M%S")
-                )
-            ),
-            "hasnt_started": lambda: (
-                "dtstart" in comp
-                and comp["dtstart"].dt.strftime("%F%H%M%S") > datetime.now().strftime("%F%H%M%S")
-            ),
+            "isnt_overdue": lambda: not ("due" in comp and _normalize_dt(comp["due"].dt) < now),
+            "hasnt_started": lambda: "dtstart" in comp and _normalize_dt(comp["dtstart"].dt) > now,
         }
         for sort_key, reverse in self._sort_keys:
             if sort_key in computed:
@@ -951,8 +941,13 @@ class Searcher(FilterMixin):
 
             if hasattr(val, "dt"):
                 val = val.dt
+            ## Aware datetimes compare as instants.  Dates and floating times
+            ## are read in the process time zone, like the time-range filters do.
+            ## Ranked behind _MISSING_FIRST and ahead of _MISSING_LAST, also
+            ## when a value near the ends of the datetime range lies beyond
+            ## DT_MIN or DT_MAX in UTC.
             if isinstance(val, date):
-                val = _sortable_time(val)
+                val = (1, _normalize_dt(val))
 
             ## TODO: I don't have time to fix test code for this at
             ## the moment (but the bug in v1.0.0 was caught by cyrus

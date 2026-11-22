@@ -29,7 +29,7 @@ from icalendar_searcher.searcher import _Reversed
 ## 2) the icalendar.Event object directly, without being part of an
 ## icalendar (this probably breaks now, but it should be acceptable)
 def test_sorting_value_mixed_types_and_reverse() -> None:
-    """Check dtstart -> formatted string, priority numeric, reversed summary -> wrapped,
+    """Check dtstart -> ranked aware datetime, priority numeric, reversed summary -> wrapped,
     and categories -> joined string."""
     cal = Calendar()
     ev = Event()
@@ -47,7 +47,7 @@ def test_sorting_value_mixed_types_and_reverse() -> None:
 
     vals = s.sorting_value(cal)
 
-    assert vals[0] == "2025-01-02090000"
+    assert vals[0] == (1, real_datetime(2025, 1, 2, 9, 0).astimezone())
     assert vals[1] == 5
     assert vals[2] == _Reversed(b"abc")
     assert vals[2] < _Reversed(b"ab")
