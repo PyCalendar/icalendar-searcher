@@ -5,8 +5,9 @@ Tests the alarm_start and alarm_end parameters for finding events/todos
 with alarms that trigger within a specific time range.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+import pytest
 from icalendar import Alarm, Calendar, Event, Todo
 
 from icalendar_searcher import Searcher
@@ -401,3 +402,64 @@ def test_todo_alarm_no_dtstart_no_due() -> None:
     )
     result = searcher.check_component(cal)
     assert result, "Todo with absolute alarm trigger should match"
+
+
+ALARM_RELATED_CASE_ICS = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:{comp}
+UID:related-case-{comp}
+DTSTART:20250115T100000Z
+{end_prop}:20250115T120000Z
+SUMMARY:Alarm RELATED case test
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder
+TRIGGER;RELATED={related}:-PT15M
+END:VALARM
+END:{comp}
+END:VCALENDAR
+"""
+
+
+@pytest.mark.parametrize("related", ["END", "end", "End", "eNd"])
+@pytest.mark.parametrize(("comp", "end_prop"), [("VEVENT", "DTEND"), ("VTODO", "DUE")])
+def test_alarm_related_param_is_case_insensitive(comp: str, end_prop: str, related: str) -> None:
+    """RFC 5545 3.2: parameter values are case-insensitive, so RELATED=end means END.
+
+    The alarm fires 15 minutes before the end (11:45), not before the start (09:45).
+    """
+    cal = Calendar.from_ical(
+        ALARM_RELATED_CASE_ICS.format(comp=comp, end_prop=end_prop, related=related)
+    )
+    kwargs = {"event": True} if comp == "VEVENT" else {"todo": True}
+
+    end_anchored = Searcher(
+        alarm_start=datetime(2025, 1, 15, 11, 40, tzinfo=timezone.utc),
+        alarm_end=datetime(2025, 1, 15, 11, 50, tzinfo=timezone.utc),
+        **kwargs,
+    )
+    assert end_anchored.check_component(cal), f"RELATED={related} should anchor on {end_prop}"
+
+    start_anchored = Searcher(
+        alarm_start=datetime(2025, 1, 15, 9, 40, tzinfo=timezone.utc),
+        alarm_end=datetime(2025, 1, 15, 9, 50, tzinfo=timezone.utc),
+        **kwargs,
+    )
+    assert not start_anchored.check_component(cal), (
+        f"RELATED={related} must not be treated as START"
+    )
+
+
+def test_alarm_multi_value_related_does_not_crash() -> None:
+    """RELATED takes one value, but TRIGGER;RELATED=END,START parses to a list.
+    The filter must not crash on it; it falls back to the default, START."""
+    cal = Calendar.from_ical(
+        ALARM_RELATED_CASE_ICS.format(comp="VEVENT", end_prop="DTEND", related="END,START")
+    )
+    searcher = Searcher(
+        event=True,
+        alarm_start=datetime(2025, 1, 15, 9, 40, tzinfo=timezone.utc),
+        alarm_end=datetime(2025, 1, 15, 9, 50, tzinfo=timezone.utc),
+    )
+    assert searcher.check_component(cal)
