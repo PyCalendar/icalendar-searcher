@@ -7,7 +7,7 @@ Tests that the filter() method correctly filters different types of inputs:
 - Handles split_expanded parameter
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from icalendar import Calendar, Event, Todo
 from icalendar.prop import vRecur
@@ -627,3 +627,141 @@ def test_filter_calendar_mixed_component_types() -> None:
 
     assert len(events) == 0
     assert len(todos) == 1
+
+
+# A daily event whose 14th occurrence was moved from 10:00 to 15:00.  RFC 4791
+# section 9.9 requires the effective value of a recurrence set to be inferred
+# from the recurrence pattern *and* its overrides, so filter_calendar() must
+# treat master and override as one unit rather than checking them one by one.
+_MOVED_OCCURRENCE_ICS = b"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:daily-with-exception
+DTSTART:20250101T100000Z
+DTEND:20250101T110000Z
+RRULE:FREQ=DAILY;COUNT=30
+SUMMARY:daily
+END:VEVENT
+BEGIN:VEVENT
+UID:daily-with-exception
+RECURRENCE-ID:20250114T100000Z
+DTSTART:20250114T150000Z
+DTEND:20250114T160000Z
+SUMMARY:moved
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+def _moved_occurrence_calendar() -> Calendar:
+    return Calendar.from_ical(_MOVED_OCCURRENCE_ICS)
+
+
+def test_filter_calendar_moved_occurrence_not_matched_at_old_time() -> None:
+    """The 14th occurrence no longer takes place at 10:00, so nothing matches."""
+    searcher = Searcher(
+        event=True,
+        start=datetime(2025, 1, 14, 9, tzinfo=timezone.utc),
+        end=datetime(2025, 1, 14, 12, tzinfo=timezone.utc),
+    )
+    assert searcher.filter([_moved_occurrence_calendar()]) == []
+    assert searcher.filter_calendar(_moved_occurrence_calendar()) is None
+
+
+def test_filter_calendar_moved_occurrence_matched_at_new_time() -> None:
+    """Control: the moved occurrence matches at its new time."""
+    searcher = Searcher(
+        event=True,
+        start=datetime(2025, 1, 14, 14, tzinfo=timezone.utc),
+        end=datetime(2025, 1, 14, 17, tzinfo=timezone.utc),
+    )
+    assert len(searcher.filter([_moved_occurrence_calendar()])) == 1
+    filtered_cal = searcher.filter_calendar(_moved_occurrence_calendar())
+    assert filtered_cal is not None
+    # Without expand, the whole recurrence set is returned, as filter() does
+    assert [str(e["SUMMARY"]) for e in filtered_cal.walk("VEVENT")] == ["daily", "moved"]
+
+
+def test_filter_calendar_expand_does_not_duplicate_moved_occurrence() -> None:
+    """Expanding the 14th must yield only the moved 15:00 occurrence."""
+    searcher = Searcher(
+        event=True,
+        start=datetime(2025, 1, 14, tzinfo=timezone.utc),
+        end=datetime(2025, 1, 15, tzinfo=timezone.utc),
+        expand=True,
+    )
+    expected = [("moved", datetime(2025, 1, 14, 15, tzinfo=timezone.utc))]
+
+    filtered = searcher.filter([_moved_occurrence_calendar()])
+    occurrences = [e for cal in filtered for e in cal.walk("VEVENT")]
+    assert [(str(e["SUMMARY"]), e.start) for e in occurrences] == expected
+
+    filtered_cal = searcher.filter_calendar(_moved_occurrence_calendar())
+    assert filtered_cal is not None
+    occurrences = filtered_cal.walk("VEVENT")
+    assert [(str(e["SUMMARY"]), e.start) for e in occurrences] == expected
+
+
+def test_filter_calendar_groups_interleaved_recurrence_set() -> None:
+    """Override before its master, with an unrelated event in between."""
+    source = _moved_occurrence_calendar()
+    master, override = source.subcomponents
+    other = Event()
+    other.add("UID", "unrelated")
+    other.add("DTSTART", datetime(2025, 1, 14, 10, tzinfo=timezone.utc))
+    other.add("DTEND", datetime(2025, 1, 14, 11, tzinfo=timezone.utc))
+    other.add("SUMMARY", "unrelated")
+    cal = Calendar()
+    for comp in (override, other, master):
+        cal.add_component(comp)
+
+    searcher = Searcher(
+        event=True,
+        start=datetime(2025, 1, 14, 9, tzinfo=timezone.utc),
+        end=datetime(2025, 1, 14, 12, tzinfo=timezone.utc),
+    )
+    filtered_cal = searcher.filter_calendar(cal)
+    assert filtered_cal is not None
+    assert [str(e["SUMMARY"]) for e in filtered_cal.walk("VEVENT")] == ["unrelated"]
+
+
+def _occurrence_window_searcher(**kwargs: object) -> Searcher:
+    return Searcher(
+        start=datetime(2025, 1, 14, 9, tzinfo=timezone.utc),
+        end=datetime(2025, 1, 14, 12, tzinfo=timezone.utc),
+        **kwargs,
+    )
+
+
+def test_filter_calendar_same_uid_different_types_not_grouped() -> None:
+    """A VTODO sharing a UID with a recurring VEVENT is not part of its set."""
+    source = _moved_occurrence_calendar()
+    master, _override = source.subcomponents
+    todo = Todo()
+    todo.add("UID", "daily-with-exception")
+    todo.add("RECURRENCE-ID", datetime(2025, 1, 14, 10, tzinfo=timezone.utc))
+    todo.add("DUE", datetime(2025, 1, 20, tzinfo=timezone.utc))
+    todo.add("SUMMARY", "todo")
+    cal = Calendar()
+    cal.add_component(master)
+    cal.add_component(todo)
+
+    filtered_cal = _occurrence_window_searcher(event=True).filter_calendar(cal)
+    assert filtered_cal is not None
+    assert [c.name for c in filtered_cal.subcomponents] == ["VEVENT"]
+    assert _occurrence_window_searcher(todo=True).filter_calendar(cal) is None
+
+
+def test_filter_calendar_duplicated_master_does_not_raise() -> None:
+    """Two masters with one UID are not a valid recurrence set; check one by one."""
+    source = _moved_occurrence_calendar()
+    master, override = source.subcomponents
+    duplicate = Calendar.from_ical(_MOVED_OCCURRENCE_ICS).subcomponents[0]
+    cal = Calendar()
+    for comp in (master, duplicate, override):
+        cal.add_component(comp)
+
+    filtered_cal = _occurrence_window_searcher(event=True).filter_calendar(cal)
+    assert filtered_cal is not None
+    assert [str(e["SUMMARY"]) for e in filtered_cal.walk("VEVENT")] == ["daily", "daily"]
