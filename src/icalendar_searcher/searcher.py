@@ -109,7 +109,10 @@ def _expansion_margin(components: list[Component]) -> timedelta:
             start, end = _normalize_dt(component.start), _normalize_dt(component.end)
             margin = max(margin, end - start)
             recurrence_id = component.get("RECURRENCE-ID")
-            if recurrence_id is not None and recurrence_id.params.get("RANGE") == "THISANDFUTURE":
+            if (
+                recurrence_id is not None
+                and str(recurrence_id.params.get("RANGE", "")).upper() == "THISANDFUTURE"
+            ):
                 margin = max(margin, end - start + abs(start - _normalize_dt(recurrence_id.dt)))
     except (error.IncompleteComponent, OverflowError, TypeError, ValueError):
         return _FALLBACK_MARGIN
