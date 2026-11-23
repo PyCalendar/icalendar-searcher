@@ -7,6 +7,7 @@ Tests that the sort() method correctly sorts different types of inputs:
 """
 
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 from icalendar import Calendar, Event, FreeBusy, Todo
@@ -93,6 +94,44 @@ def test_sort_components_event() -> None:
     assert sorted_events[0]["SUMMARY"] == "Apple"
     assert sorted_events[1]["SUMMARY"] == "Banana"
     assert sorted_events[2]["SUMMARY"] == "Zebra"
+
+
+@pytest.mark.parametrize("reverse_due", [False, True])
+def test_sort_keeps_unparseable_resources_last(reverse_due: bool) -> None:
+    class UnparseableResource:
+        @property
+        def icalendar_instance(self) -> Calendar:
+            raise ValueError("invalid DUE")
+
+    def todo(day: int, priority: int) -> Todo:
+        task = Todo()
+        task.add("due", datetime(2025, 1, day))
+        task.add("priority", priority)
+        return task
+
+    early, late_low, late_high = todo(1, 1), todo(2, 9), todo(2, 1)
+    bad1, bad2 = UnparseableResource(), UnparseableResource()
+    tasks = [bad1, late_low, early, bad2, late_high]
+    searcher = Searcher()
+    assert searcher.sort(tasks) == tasks
+
+    searcher.add_sort_key("DUE", reversed=reverse_due)
+    searcher.add_sort_key("PRIORITY")
+    result = searcher.sort(tasks)
+
+    valid = [late_high, late_low, early] if reverse_due else [early, late_high, late_low]
+    assert result == [*valid, bad1, bad2]
+    with pytest.raises(ValueError, match="invalid DUE"):
+        _ = result[-1].icalendar_instance
+
+
+def test_sort_propagates_errors_reading_a_key_from_a_parsed_component() -> None:
+    task = Todo()
+    searcher = Searcher()
+    searcher.add_sort_key("PRIORITY")
+    with patch.object(task, "get", side_effect=ValueError("invalid priority")):
+        with pytest.raises(ValueError, match="invalid priority"):
+            searcher.sort([task])
 
 
 def test_sort_components_todo() -> None:

@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A resource that raised `ValueError` while parsing its calendar could abort the entire sort. `Searcher.sort()` now returns such resources after the sorted results, in their original order.
+
 - **Case-insensitive** matching of `STATUS`, `TRIGGER;RELATED` and `RANGE=THISANDFUTURE`.  `STATUS:completed` is valid according to the RFC, but the task would not be excluded from the pending tasks list.  `TRIGGER;RELATED=end` in an alarm would also be anchored on `DTSTART`.  `RANGE=thisandfuture` is still ignored when expanding recurrences, pending https://github.com/niccokunzmann/python-recurring-ical-events/issues/310.
 
 - **Contains** could trigger some false positives for properties occurring multiple times (like COMMENT and ATTENDEE - the filter text would be matched towards `repr()`, which included the `vText` class name).
