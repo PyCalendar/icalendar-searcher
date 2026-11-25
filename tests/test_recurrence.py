@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
+import pytest
 from icalendar import Calendar, Event
 from icalendar.prop import vRecur
 
 from icalendar_searcher import Searcher
+from icalendar_searcher.searcher import _expansion_margin
 
 
 def test_recurrence_simple_matches_exact_date() -> None:
@@ -238,3 +240,108 @@ def test_recurrence_exception_modified_summary_not_match_wrong_range() -> None:
     assert not searcher.check_component(cal), (
         "Should not match when exception is outside date range"
     )
+
+
+def _this_and_future_cal(
+    range_param: str,
+    first: str = "20260101",
+    moved: str = "20260103",
+    moved_to: tuple[str, str] = ("20260103T140000Z", "20260103T150000Z"),
+) -> Calendar:
+    """Five daily 10:00 occurrences from ``first``; from ``moved`` on they are at ``moved_to``.
+
+    By default the ones from 2026-01-03 on move four hours later.
+    """
+    return Calendar.from_ical(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+        "BEGIN:VEVENT\r\nUID:daily\r\nDTSTAMP:20260101T000000Z\r\n"
+        f"DTSTART:{first}T100000Z\r\nDTEND:{first}T110000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\n"
+        "END:VEVENT\r\n"
+        "BEGIN:VEVENT\r\nUID:daily\r\nDTSTAMP:20260101T000000Z\r\n"
+        f"RECURRENCE-ID;RANGE={range_param}:{moved}T100000Z\r\n"
+        f"DTSTART:{moved_to[0]}\r\nDTEND:{moved_to[1]}\r\n"
+        "END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "range_param",
+    [
+        "THISANDFUTURE",
+        pytest.param(
+            "thisandfuture",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="recurring_ical_events matches RANGE case-sensitively, see "
+                "https://github.com/niccokunzmann/python-recurring-ical-events/issues/310",
+            ),
+        ),
+    ],
+)
+def test_this_and_future_range_is_case_insensitive(range_param: str) -> None:
+    """RFC 5545 section 3.2: unquoted parameter values are case-insensitive.
+
+    The search is far from the ends of the datetime range, so this guards the
+    expansion in recurring_ical_events only, not _expansion_margin.
+    """
+    searcher = Searcher(
+        event=True,
+        start=datetime(2026, 1, 4, tzinfo=timezone.utc),
+        end=datetime(2026, 1, 5, tzinfo=timezone.utc),
+        expand=True,
+    )
+    result = list(searcher.check_component(_this_and_future_cal(range_param)))
+    assert [x.start for x in result] == [datetime(2026, 1, 4, 14, tzinfo=timezone.utc)]
+
+
+@pytest.mark.parametrize(
+    "range_param",
+    [
+        "THISANDFUTURE",
+        "thisandfuture",
+    ],
+)
+def test_this_and_future_widens_expansion_margin(range_param: str) -> None:
+    """An override that moves later occurrences by four hours needs that much more margin."""
+    components = list(_this_and_future_cal(range_param).walk("VEVENT"))
+    assert _expansion_margin(components) == timedelta(days=1, hours=5)
+
+
+@pytest.mark.parametrize(
+    "range_param",
+    [
+        "THISANDFUTURE",
+        pytest.param(
+            "thisandfuture",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="recurring_ical_events matches RANGE case-sensitively, see "
+                "https://github.com/niccokunzmann/python-recurring-ical-events/issues/310",
+            ),
+        ),
+    ],
+)
+def test_this_and_future_near_start_of_datetime_range(range_param: str) -> None:
+    """Occurrences moved two days later, searched near the start of the datetime range.
+
+    recurring_ical_events widens the window by how far they moved, so the
+    window has to stay that much further inside the range, or it overflows
+    and the components come back unexpanded.  The two occurrences within
+    that margin of the start of the range are left out, as designed.
+    """
+    cal = _this_and_future_cal(
+        range_param,
+        first="00010101",
+        moved="00010103",
+        moved_to=("00010105T100000Z", "00010105T110000Z"),
+    )
+    searcher = Searcher(
+        event=True,
+        start=datetime(1, 1, 1, tzinfo=timezone.utc),
+        end=datetime(1, 1, 10, tzinfo=timezone.utc),
+        expand=True,
+    )
+    result = list(searcher.check_component(cal))
+    assert sorted(x.start for x in result) == [
+        datetime(1, 1, day, 10, tzinfo=timezone.utc) for day in (5, 6, 7)
+    ]

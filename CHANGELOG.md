@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Case-insensitive** matching of `STATUS`, `TRIGGER;RELATED` and `RANGE=THISANDFUTURE`.  `STATUS:completed` is valid according to the RFC, but the task would not be excluded from the pending tasks list.  `TRIGGER;RELATED=end` in an alarm would also be anchored on `DTSTART`.  `RANGE=thisandfuture` is still ignored when expanding recurrences, pending https://github.com/niccokunzmann/python-recurring-ical-events/issues/310.
+
 - **Contains** could trigger some false positives for properties occurring multiple times (like COMMENT and ATTENDEE - the filter text would be matched towards `repr()`, which included the `vText` class name).
 
 - **VTODO time-range boundaries**: the VTODO table of RFC 4791 section 9.9 uses inclusive bounds that differ from row to row, and the implementation reduced all rows to the VEVENT form.  A task with only `DUE`, only `COMPLETED`, or both `CREATED` and `COMPLETED`, or with `DTSTART` and `DURATION`, was wrongly included or excluded when the search range started or ended exactly on one of its timestamps.  The rows are now evaluated as written in the RFC.

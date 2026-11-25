@@ -203,3 +203,40 @@ END:VCALENDAR"""
     searcher = Searcher(todo=True, end=end, include_completed=True)
     result = searcher.check_component(cal)
     assert bool(result)
+
+
+@pytest.mark.parametrize("status", ["completed", "Completed", "cancelled", "Cancelled"])
+def test_include_completed_status_case_insensitive(status: str) -> None:
+    """STATUS is an enumerated value, and RFC 5545 section 2 makes those
+    case-insensitive: a task with STATUS:completed is completed."""
+    data = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VTODO
+UID:status-case
+DTSTAMP:20260101T000000Z
+SUMMARY:task
+STATUS:{status}
+END:VTODO
+END:VCALENDAR"""
+    cal = Calendar.from_ical(data)
+    assert not Searcher(todo=True).check_component(cal)
+    assert Searcher(todo=True, include_completed=True).check_component(cal)
+
+
+def test_include_completed_repeated_status_does_not_crash() -> None:
+    """STATUS may occur only once (RFC 5545 3.6.2), but a server may send it twice.
+    icalendar then returns a list; the filter must not crash on it."""
+    data = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VTODO
+UID:status-twice
+DTSTAMP:20260101T000000Z
+SUMMARY:task
+STATUS:NEEDS-ACTION
+STATUS:IN-PROCESS
+END:VTODO
+END:VCALENDAR"""
+    cal = Calendar.from_ical(data)
+    assert Searcher(todo=True).check_component(cal)

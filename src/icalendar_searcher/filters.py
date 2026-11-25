@@ -224,7 +224,7 @@ class FilterMixin:
 
         ## For VTODOs, exclude if STATUS is COMPLETED or CANCELLED, or if COMPLETED property is set
         status = component.get("STATUS", "NEEDS-ACTION")
-        if status in ("COMPLETED", "CANCELLED"):
+        if isinstance(status, str) and status.upper() in ("COMPLETED", "CANCELLED"):
             return False
         if "COMPLETED" in component:
             return False
@@ -402,7 +402,6 @@ class FilterMixin:
 
         ## Get component start/end for relative trigger calculations
         ## Use try/except because .start/.end may raise IncompleteComponent
-        ## For VTODO, RFC 5545 says TRIGGER is relative to DUE if present, else DTSTART
         comp_start = None
         comp_end = None
         try:
@@ -434,10 +433,11 @@ class FilterMixin:
                 trigger_delta = trigger_value
 
                 ## Check TRIGGER's RELATED parameter (default is START)
-                ## For VTODO, default anchor is DUE if present, else DTSTART
                 related = "START"  # Default per RFC 5545
                 if hasattr(trigger, "params") and "RELATED" in trigger.params:
                     related = trigger.params["RELATED"]
+                    if isinstance(related, str):
+                        related = related.upper()
 
                 ## Calculate alarm time based on RELATED and component type
                 if related == "END" and comp_end:
