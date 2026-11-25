@@ -1106,7 +1106,7 @@ class Searcher(FilterMixin):
         ## one of the things identifying a recurrence set is that the
         ## uid is the same for all components in the set
         first = components[0]
-        if any(x for x in components if x["uid"] != first["uid"]):
+        if any(x for x in components if x.get("uid") != first.get("uid")):
             raise ValueError(
                 "Input parameter component is supposed to contain a single component or a recurrence set - but multiple UIDs found"
             )

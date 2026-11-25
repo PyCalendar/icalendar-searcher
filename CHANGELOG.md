@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`filter_calendar()` split recurrence sets**: each subcomponent was checked on its own, so a recurring master was expanded without its `RECURRENCE-ID` overrides.  A moved occurrence still matched at its original time, and with `expand=True` it was returned twice, at the old and the new time.  A master and its overrides are now checked together as one recurrence set, as `filter()` already did, and without `expand` a match returns the whole set, master included.  Same-UID components that do not form a valid recurrence set (several `VFREEBUSY`, a duplicated master) are still checked one by one.
 
+- **Components without a `UID`** made `filter()` and `filter_calendar()` raise `KeyError`.
+
 - **Sorting a calendar holding `VFREEBUSY` or `X-` components** raised `KeyError`, whatever the sort key.
 
 - **Sorting components that lack the sort property** raised `TypeError` for text properties such as `SUMMARY`, for numbers such as `SEQUENCE`, and for any reversed sort key.  A missing property now sorts as a default value, documented in the README: a missing `DTSTART` first and a missing `DUE` last - also relative to dates before 1970 and after 2050, which used to sort on the wrong side of them.  A reversed text sort also put `ab` before `abc`; it now gives `abc`, `ab`.

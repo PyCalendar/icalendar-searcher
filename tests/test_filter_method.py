@@ -765,3 +765,20 @@ def test_filter_calendar_duplicated_master_does_not_raise() -> None:
     filtered_cal = _occurrence_window_searcher(event=True).filter_calendar(cal)
     assert filtered_cal is not None
     assert [str(e["SUMMARY"]) for e in filtered_cal.walk("VEVENT")] == ["daily", "daily"]
+
+
+def test_filter_calendar_components_without_uid() -> None:
+    """Components without a UID are checked one by one."""
+    cal = Calendar()
+    for hour, summary in ((10, "inside"), (15, "outside")):
+        event = Event()
+        event.add("DTSTART", datetime(2025, 1, 14, hour, tzinfo=timezone.utc))
+        event.add("DTEND", datetime(2025, 1, 14, hour + 1, tzinfo=timezone.utc))
+        event.add("SUMMARY", summary)
+        cal.add_component(event)
+
+    searcher = _occurrence_window_searcher(event=True)
+    filtered_cal = searcher.filter_calendar(cal)
+    assert filtered_cal is not None
+    assert [str(e["SUMMARY"]) for e in filtered_cal.walk("VEVENT")] == ["inside"]
+    assert len(searcher.filter([cal.subcomponents[0]])) == 1
