@@ -91,6 +91,21 @@ def _recurs(component: Component) -> bool:
     return "RRULE" in component or "RDATE" in component
 
 
+def _is_master(component: Component) -> bool:
+    """Whether the component is the master of a recurrence set."""
+    return _recurs(component) and "RECURRENCE-ID" not in component
+
+
+def _is_recurrence_set(components: list[Component]) -> bool:
+    """Whether the components form one valid recurrence set: at most one
+    master, and every other component an override with RECURRENCE-ID and
+    without RRULE.  UIDs are not compared here."""
+    others = [c for c in components if not _is_master(c)]
+    return len(components) - len(others) <= 1 and all(
+        "RECURRENCE-ID" in c and "RRULE" not in c for c in others
+    )
+
+
 def _near_edge(value: date | datetime) -> bool:
     return value < _as_kind_of(value, _shift(DT_MIN, _EDGE_ZONE)) or value > _as_kind_of(
         value, _shift(DT_MAX, -_EDGE_ZONE)
@@ -798,10 +813,32 @@ class Searcher(FilterMixin):
             comp for comp in calendar.subcomponents if not isinstance(comp, Timezone)
         ]
 
-        # Filter each component
-        matching_components = []
+        # Group the components into recurrence sets by type and UID,
+        # keeping the order of first appearance.  A master and its
+        # RECURRENCE-ID overrides must be checked together, otherwise the
+        # master is expanded without its overrides.  Components sharing
+        # a UID that do not form a valid recurrence set (e.g. several
+        # VFREEBUSY, or a duplicated master) are checked one by one, as
+        # are components without a UID.
+        by_uid: dict[object, list[Component]] = {}
         for comp in other_components:
-            matched = self.check_component(comp)
+            uid = comp.get("UID")
+            key = (comp.name, str(uid)) if uid is not None else id(comp)
+            by_uid.setdefault(key, []).append(comp)
+        groups: list[list[Component]] = []
+        for members in by_uid.values():
+            if len(members) > 1 and _is_recurrence_set(members):
+                groups.append(members)
+            else:
+                groups.extend([c] for c in members)
+
+        # Filter each recurrence set
+        matching_components = []
+        for group in groups:
+            group_cal = Calendar()
+            for comp in group:
+                group_cal.add_component(comp)
+            matched = self.check_component(group_cal)
             if matched:
                 matched_list = list(matched)
                 if matched_list:
@@ -1059,25 +1096,20 @@ class Searcher(FilterMixin):
         ## the head.  Some servers (notably calendar.mail.ru) emit overrides
         ## before the master.
         if len(components) > 1:
-            masters = [c for c in components if _recurs(c) and "recurrence-id" not in c]
-            non_masters = [c for c in components if c not in masters]
-            if len(masters) > 1 or any("rrule" in c for c in non_masters):
+            if not _is_recurrence_set(components):
                 raise ValueError(
                     "Expected a valid recurrence set, either with one master component followed with special recurrences or with only occurrences"
                 )
-            if not all("recurrence-id" in c for c in non_masters):
-                raise ValueError(
-                    "Expected a valid recurrence set, either with one master component followed with special recurrences or with only occurrences"
-                )
+            masters = [c for c in components if _is_master(c)]
             if masters:
-                components = masters + non_masters
+                components = masters + [c for c in components if not _is_master(c)]
 
         ## components should typically be a list with only one component.
         ## if there are more components, it should be a recurrence set
         ## one of the things identifying a recurrence set is that the
         ## uid is the same for all components in the set
         first = components[0]
-        if any(x for x in components if x["uid"] != first["uid"]):
+        if any(x for x in components if x.get("uid") != first.get("uid")):
             raise ValueError(
                 "Input parameter component is supposed to contain a single component or a recurrence set - but multiple UIDs found"
             )
