@@ -35,6 +35,10 @@ _EDGE_ZONE = timedelta(days=2 * 366)
 _FALLBACK_MARGIN = timedelta(days=366)
 
 
+class _UnparseableSortResource(ValueError):
+    """A resource could not supply its parsed calendar for sorting."""
+
+
 @total_ordering
 class _Reversed:
     """A sort value that sorts in the opposite order of the value it wraps."""
@@ -873,6 +877,7 @@ class Searcher(FilterMixin):
         """Sort calendar objects according to configured sort keys.
 
         This method does not modify the input list. It returns a new sorted list.
+        Resources that cannot be parsed sort last, in their original order.
 
         (the idea with this is that the input may be a generator)
 
@@ -884,10 +889,16 @@ class Searcher(FilterMixin):
             searcher.add_sort_key("DTSTART")
             sorted_events = searcher.sort(events)  # Returns new sorted list
         """
-        if self._sort_keys:
-            return sorted(components, key=self.sorting_value)
-        else:
+        if not self._sort_keys:
             return components.copy()
+
+        def sort_key(component: Component | CalendarObjectResource) -> tuple:
+            try:
+                return (0, self.sorting_value(component))
+            except _UnparseableSortResource:
+                return (1,)
+
+        return sorted(components, key=sort_key)
 
     def sort_calendar(self, calendar: Calendar) -> Calendar:
         """Sort subcomponents within a Calendar object according to configured sort keys.
@@ -951,7 +962,10 @@ class Searcher(FilterMixin):
         ## caldav library.  It may need some rethinking and QA work.
 
         ## TODO: we disregard any complexity wrg of recurring events
-        component = self._unwrap(component)
+        try:
+            component = self._unwrap(component)
+        except ValueError as exc:
+            raise _UnparseableSortResource(str(exc)) from exc
         if isinstance(component, Calendar):
             not_tz_components = (x for x in component.subcomponents if not isinstance(x, Timezone))
             comp = next(not_tz_components)
