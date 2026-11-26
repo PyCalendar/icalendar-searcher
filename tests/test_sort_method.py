@@ -120,7 +120,9 @@ def test_sort_keeps_unparseable_resources_last(reverse_due: bool) -> None:
     result = searcher.sort(tasks)
 
     valid = [late_high, late_low, early] if reverse_due else [early, late_high, late_low]
+    assert searcher.sort([late_low, early, late_high]) == valid
     assert result == [*valid, bad1, bad2]
+    assert searcher.sort([bad2, bad1]) == [bad2, bad1]
     with pytest.raises(ValueError, match="invalid DUE"):
         _ = result[-1].icalendar_instance
 
